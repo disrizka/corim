@@ -27,18 +27,14 @@ class _SplashScreenState extends ConsumerState<SplashScreen> {
 
     if (mounted) {
       if (isAuthenticated) {
-       Navigator.pushReplacement(
-    context,
-    MaterialPageRoute(
-      builder: (context) => const HomeScreen(), 
-    ),
-  );
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(builder: (context) => const HomeScreen()),
+        );
       } else {
         Navigator.pushReplacement(
           context,
-          MaterialPageRoute(
-            builder: (context) => const LoginScreen(),
-          ),
+          MaterialPageRoute(builder: (context) => const LoginScreen()),
         );
       }
     }
@@ -47,7 +43,7 @@ class _SplashScreenState extends ConsumerState<SplashScreen> {
   @override
   Widget build(BuildContext context) {
     return const Scaffold(
-      backgroundColor: Color(0xFF1E3A8A), 
+      backgroundColor: Color.fromARGB(255, 255, 255, 255),
       body: Center(
         child: SizedBox(
           width: 150,
