@@ -13,7 +13,7 @@ class ApiService {
     String? token = _ref.read(authProvider).accessToken;
     final url = Uri.parse('${ApiConfig.baseUrl}$endpoint');
 
-    print('📤 [API] GET $endpoint');
+    print('[API] GET $endpoint');
 
     var response = await http.get(
       url,
@@ -23,17 +23,17 @@ class ApiService {
       },
     );
 
-    print('📥 [API] Status: ${response.statusCode}');
+    print('[API] Status: ${response.statusCode}');
 
     if (response.statusCode == 401) {
-      print('⚠️ [API] 401 → mencoba silent refresh...');
+      print('[API] 401 → mencoba silent refresh...');
 
       final newToken = await _ref
           .read(authProvider.notifier)
           .refreshFromInterceptor();
 
       if (newToken != null) {
-        print('🔁 [API] Retry dengan token baru...');
+        print('[API] Retry dengan token baru...');
         response = await http.get(
           url,
           headers: {
@@ -41,9 +41,9 @@ class ApiService {
             'Content-Type': ApiConfig.contentTypeJson,
           },
         );
-        print('✅ [API] Retry status: ${response.statusCode}');
+        print('[API] Retry status: ${response.statusCode}');
       } else {
-        print('❌ [API] Refresh gagal → user diarahkan ke Login');
+        print('[API] Refresh gagal → user diarahkan ke Login');
         return null;
       }
     }
@@ -56,7 +56,7 @@ class ApiService {
   ) async {
     String? token = _ref.read(authProvider).accessToken;
     final url = Uri.parse('${ApiConfig.baseUrl}$endpoint');
-    print('📤 [API] POST $endpoint');
+    print('[API] POST $endpoint');
     var response = await http.post(
       url,
       headers: {
@@ -66,17 +66,17 @@ class ApiService {
       body: jsonEncode(body),
     );
 
-    print('📥 [API] Status: ${response.statusCode}');
+    print('[API] Status: ${response.statusCode}');
 
     if (response.statusCode == 401) {
-      print('⚠️ [API] 401 → mencoba silent refresh...');
+      print('[API] 401 → mencoba silent refresh...');
 
       final newToken = await _ref
           .read(authProvider.notifier)
           .refreshFromInterceptor();
 
       if (newToken != null) {
-        print('🔁 [API] Retry POST dengan token baru...');
+        print('[API] Retry POST dengan token baru...');
         response = await http.post(
           url,
           headers: {
@@ -85,9 +85,9 @@ class ApiService {
           },
           body: jsonEncode(body),
         );
-        print('✅ [API] Retry status: ${response.statusCode}');
+        print('[API] Retry status: ${response.statusCode}');
       } else {
-        print('❌ [API] Refresh gagal → user diarahkan ke Login');
+        print('[API] Refresh gagal → user diarahkan ke Login');
         return null;
       }
     }

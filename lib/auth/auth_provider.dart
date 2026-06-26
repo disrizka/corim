@@ -58,7 +58,9 @@ class AuthNotifier extends Notifier<AuthState> {
     try {
       await _storage.write(key: StorageKeys.accessToken, value: accessToken);
       await _storage.write(key: StorageKeys.refreshToken, value: refreshToken);
-      print('[AUTH] Token tersimpan');
+      final loginTime = DateTime.now().toIso8601String();
+      await _storage.write(key: 'login_time', value: loginTime);
+      print('[AUTH] Token tersimpan, login time: $loginTime');
       state = AuthState(accessToken: accessToken, isAuthenticated: true);
     } catch (e) {
       print('[AUTH] Gagal simpan token: $e');

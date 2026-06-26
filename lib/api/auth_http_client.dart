@@ -22,14 +22,14 @@ class AuthHttpClient extends http.BaseClient {
 
     if (accessToken != null) {
       request.headers['Authorization'] = 'Bearer $accessToken';
-      print('📤 [INTERCEPTOR] ${request.method} ${request.url}');
-      print('📤 [INTERCEPTOR] Token: ${accessToken.substring(0, 20)}...');
+      print('[INTERCEPTOR] ${request.method} ${request.url}');
+      print('[INTERCEPTOR] Token: ${accessToken.substring(0, 20)}...');
     }
 
     final response = await _inner.send(request);
-    print('📥 [INTERCEPTOR] Status ${response.statusCode} ← ${request.url}');
+    print('[INTERCEPTOR] Status ${response.statusCode} ← ${request.url}');
     if (response.statusCode == 401 && !_isRefreshing) {
-      print('⚠️ [INTERCEPTOR] 401 → silent refresh...');
+      print('[INTERCEPTOR] 401 → silent refresh...');
       return await _handleUnauthorized(request, response);
     }
 

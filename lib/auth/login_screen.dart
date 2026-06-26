@@ -168,14 +168,11 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                               child: Column(
                                 mainAxisSize: MainAxisSize.min,
                                 children: [
-                                  // Logo
                                   Image.asset(
                                     'assets/images/logo.png',
                                     height: 52,
                                   ),
                                   const SizedBox(height: 14),
-
-                                  // Title
                                   const Text(
                                     'Login',
                                     style: TextStyle(
@@ -186,8 +183,6 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                                     ),
                                   ),
                                   const SizedBox(height: 6),
-
-                                  // Subtitle
                                   const Text(
                                     'Please to input your account data. For access this app.',
                                     textAlign: TextAlign.center,
@@ -198,8 +193,6 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                                     ),
                                   ),
                                   const SizedBox(height: 24),
-
-                                  // Email field
                                   TextFormField(
                                     controller: _emailController,
                                     keyboardType: TextInputType.emailAddress,
@@ -260,8 +253,6 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                                         : null,
                                   ),
                                   const SizedBox(height: 14),
-
-                                  // Password field
                                   TextFormField(
                                     controller: _passwordController,
                                     obscureText: _obscurePassword,
@@ -335,8 +326,6 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                                         : null,
                                   ),
                                   const SizedBox(height: 8),
-
-                                  // Forget Password
                                   Align(
                                     alignment: Alignment.centerLeft,
                                     child: TextButton(
@@ -358,8 +347,6 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                                     ),
                                   ),
                                   const SizedBox(height: 22),
-
-                                  // Login button
                                   SizedBox(
                                     width: double.infinity,
                                     height: 50,
@@ -426,7 +413,6 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                   ),
                 ),
 
-                // Footer
                 Padding(
                   padding: const EdgeInsets.only(bottom: 28),
                   child: Column(
