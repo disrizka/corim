@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "1052779949245",
+    "project_id": "corim-apex",
+    "storage_bucket": "corim-apex.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:1052779949245:android:96be83bf7bc6247ec45bd4",
+        "android_client_info": {
+          "package_name": "com.example.corim"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCNmp5HOJ-_hd73SVUtKrKkXQameIfSSr8"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

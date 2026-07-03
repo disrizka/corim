@@ -46,8 +46,8 @@ class _SplashScreenState extends ConsumerState<SplashScreen> {
       backgroundColor: Color.fromARGB(255, 255, 255, 255),
       body: Center(
         child: SizedBox(
-          width: 150,
-          height: 150,
+          width: 200,
+          height: 200,
           child: Image(
             image: AssetImage('assets/images/logo.png'),
             fit: BoxFit.contain,
