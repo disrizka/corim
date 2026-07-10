@@ -1,6 +1,7 @@
-import 'dart:ui';
-import 'package:corim/auth/auth_provider.dart';
-import 'package:corim/auth/login_screen.dart';
+import 'package:corim/crm/client/client_screen.dart';
+import 'package:corim/main_button_nav.dart';
+import 'package:corim/notifications/notifcation_screen.dart';
+import 'package:corim/notifications/notification_provider.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -21,7 +22,7 @@ class HomeScreen extends ConsumerWidget {
                   padding: const EdgeInsets.only(bottom: 100),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [_buildMenuRow(), _buildRequestList()],
+                    children: [_buildMenuRow(context), _buildRequestList()],
                   ),
                 ),
               ),
@@ -32,7 +33,7 @@ class HomeScreen extends ConsumerWidget {
             bottom: 16,
             left: 16,
             right: 16,
-            child: _buildBottomNav(context, ref),
+            child: const MainBottomNav(currentItem: MainNavItem.home),
           ),
         ],
       ),
@@ -89,26 +90,49 @@ class HomeScreen extends ConsumerWidget {
                 ),
               ),
 
-              Stack(
-                children: [
-                  const Icon(
-                    Icons.notifications_outlined,
-                    color: Colors.white,
-                    size: 26,
-                  ),
-                  Positioned(
-                    right: 0,
-                    top: 0,
-                    child: Container(
-                      width: 8,
-                      height: 8,
-                      decoration: const BoxDecoration(
-                        color: Colors.redAccent,
-                        shape: BoxShape.circle,
-                      ),
+              GestureDetector(
+                onTap: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => const NotificationScreen(),
                     ),
-                  ),
-                ],
+                  );
+                },
+                child: Stack(
+                  clipBehavior: Clip.none,
+                  children: [
+                    const Icon(
+                      Icons.notifications_outlined,
+                      color: Colors.white,
+                      size: 26,
+                    ),
+                    if (ref.watch(unreadNotificationCountProvider) > 0)
+                      Positioned(
+                        right: -2,
+                        top: -2,
+                        child: Container(
+                          padding: const EdgeInsets.all(3),
+                          decoration: const BoxDecoration(
+                            color: Colors.redAccent,
+                            shape: BoxShape.circle,
+                          ),
+                          constraints: const BoxConstraints(
+                            minWidth: 16,
+                            minHeight: 16,
+                          ),
+                          child: Text(
+                            '${ref.watch(unreadNotificationCountProvider)}',
+                            textAlign: TextAlign.center,
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 9,
+                            ),
+                          ),
+                        ),
+                      ),
+                  ],
+                ),
               ),
             ],
           ),
@@ -117,11 +141,32 @@ class HomeScreen extends ConsumerWidget {
     );
   }
 
-  Widget _buildMenuRow() {
+  Widget _buildMenuRow(BuildContext context) {
     final menus = [
-      {'asset': 'assets/images/home/crm.png', 'label': 'CRM'},
-      {'asset': 'assets/images/home/finance.png', 'label': 'FINANCE'},
-      {'asset': 'assets/images/home/hr.png', 'label': 'HR'},
+      {
+        'asset': 'assets/images/home/crm.png',
+        'label': 'CRM',
+        'onTap': () {
+          Navigator.push(
+            context,
+            MaterialPageRoute(builder: (_) => const ClientListScreen()),
+          );
+        },
+      },
+      {
+        'asset': 'assets/images/home/finance.png',
+        'label': 'FINANCE',
+        'onTap': () {
+          // TODO: arahkan ke halaman Finance kalau sudah ada screen-nya
+        },
+      },
+      {
+        'asset': 'assets/images/home/hr.png',
+        'label': 'HR',
+        'onTap': () {
+          // TODO: arahkan ke halaman HR kalau sudah ada screen-nya
+        },
+      },
     ];
 
     return Container(
@@ -130,28 +175,31 @@ class HomeScreen extends ConsumerWidget {
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceAround,
         children: menus.map((m) {
-          return Column(
-            children: [
-              Container(
-                width: 64,
-                height: 64,
-                decoration: BoxDecoration(
-                  color: const Color(0xFF1B3A6B),
-                  borderRadius: BorderRadius.circular(16),
+          return GestureDetector(
+            onTap: m['onTap'] as VoidCallback,
+            child: Column(
+              children: [
+                Container(
+                  width: 64,
+                  height: 64,
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF1B3A6B),
+                    borderRadius: BorderRadius.circular(16),
+                  ),
+                  padding: const EdgeInsets.all(14),
+                  child: Image.asset(m['asset'] as String, color: Colors.white),
                 ),
-                padding: const EdgeInsets.all(14),
-                child: Image.asset(m['asset'] as String, color: Colors.white),
-              ),
-              const SizedBox(height: 8),
-              Text(
-                m['label'] as String,
-                style: const TextStyle(
-                  fontSize: 12,
-                  fontWeight: FontWeight.w600,
-                  color: Color(0xFF1A1A2E),
+                const SizedBox(height: 8),
+                Text(
+                  m['label'] as String,
+                  style: const TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                    color: Color(0xFF1A1A2E),
+                  ),
                 ),
-              ),
-            ],
+              ],
+            ),
           );
         }).toList(),
       ),
@@ -446,119 +494,6 @@ class HomeScreen extends ConsumerWidget {
             ),
           ),
         ],
-      ),
-    );
-  }
-
-  Widget _buildBottomNav(BuildContext context, WidgetRef ref) {
-    return ClipRRect(
-      borderRadius: BorderRadius.circular(32),
-      child: Container(
-        height: 64,
-        decoration: BoxDecoration(
-          color: const Color(0xFF1A1D52),
-          borderRadius: BorderRadius.circular(32),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withOpacity(0.25),
-              blurRadius: 16,
-              offset: const Offset(0, 4),
-            ),
-          ],
-        ),
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.spaceAround,
-          children: [
-            _navImageItem('assets/images/home/nav/home.png', true),
-            _navImageItem('assets/images/home/nav/folder.png', false),
-            GestureDetector(
-              onTap: () async {
-                final confirm = await showDialog<bool>(
-                  context: context,
-                  builder: (ctx) => AlertDialog(
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(16),
-                    ),
-                    title: const Text(
-                      'Keluar Aplikasi',
-                      style: TextStyle(
-                        fontWeight: FontWeight.w700,
-                        fontSize: 16,
-                      ),
-                    ),
-                    content: const Text(
-                      'Apakah Anda yakin ingin keluar dari aplikasi?',
-                      style: TextStyle(fontSize: 14, color: Color(0xFF555555)),
-                    ),
-                    actions: [
-                      TextButton(
-                        onPressed: () => Navigator.pop(ctx, false),
-                        child: const Text(
-                          'Batal',
-                          style: TextStyle(color: Color(0xFF555555)),
-                        ),
-                      ),
-                      DecoratedBox(
-                        decoration: BoxDecoration(
-                          gradient: const LinearGradient(
-                            colors: [Color(0xFF1B1C52), Color(0xFF075985)],
-                          ),
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                        child: ElevatedButton(
-                          onPressed: () => Navigator.pop(ctx, true),
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: Colors.transparent,
-                            foregroundColor: Colors.white,
-                            shadowColor: Colors.transparent,
-                            elevation: 0,
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(8),
-                            ),
-                          ),
-                          child: const Text('Keluar'),
-                        ),
-                      ),
-                    ],
-                  ),
-                );
-                if (confirm == true && context.mounted) {
-                  await ref.read(authProvider.notifier).forceLogout();
-                  if (context.mounted) {
-                    Navigator.pushReplacement(
-                      context,
-                      MaterialPageRoute(
-                        builder: (context) => const LoginScreen(),
-                      ),
-                    );
-                  }
-                }
-              },
-              child: Padding(
-                padding: const EdgeInsets.all(12),
-                child: Image.asset(
-                  'assets/images/home/nav/contact.png',
-                  width: 26,
-                  height: 26,
-                  color: Colors.white60,
-                ),
-              ),
-            ),
-            _navImageItem('assets/images/home/nav/list.png', false),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _navImageItem(String asset, bool isActive) {
-    return Padding(
-      padding: const EdgeInsets.all(12),
-      child: Image.asset(
-        asset,
-        width: 26,
-        height: 26,
-        color: isActive ? Colors.white : Colors.white60,
       ),
     );
   }

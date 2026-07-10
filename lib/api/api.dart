@@ -6,6 +6,7 @@ class ApiConfig {
 class Endpoints {
   static const String login = "auth/login";
   static const String refreshToken = "auth/refresh-token";
+  static const String clients = "clients";
 }
 
 class StorageKeys {
