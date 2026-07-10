@@ -62,7 +62,7 @@ void main() async {
     FirebaseMessaging.onMessage.listen((RemoteMessage message) {
       RemoteNotification? notification = message.notification;
       AndroidNotification? android = message.notification?.android;
-      
+
       if (notification != null && android != null) {
         _localNotificationsPlugin.show(
           notification.hashCode,

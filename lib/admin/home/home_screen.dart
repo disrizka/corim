@@ -1,3 +1,4 @@
+import 'package:corim/auth/auth_provider.dart';
 import 'package:corim/crm/client/client_screen.dart';
 import 'package:corim/main_button_nav.dart';
 import 'package:corim/notifications/notifcation_screen.dart';
@@ -70,19 +71,19 @@ class HomeScreen extends ConsumerWidget {
               ),
               const SizedBox(width: 12),
 
-              const Expanded(
+              Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      'Hello, Mike!',
-                      style: TextStyle(
+                      'Hello, ${ref.watch(authProvider).name ?? 'User'}!',
+                      style: const TextStyle(
                         color: Colors.white,
                         fontSize: 18,
                         fontWeight: FontWeight.w700,
                       ),
                     ),
-                    Text(
+                    const Text(
                       'Check your activity',
                       style: TextStyle(color: Colors.white70, fontSize: 13),
                     ),

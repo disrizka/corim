@@ -1,8 +1,10 @@
 import 'dart:convert';
+import 'dart:io';
 import 'dart:ui';
 import 'package:corim/admin/home/home_screen.dart';
 import 'package:corim/api/api.dart';
 import 'package:corim/auth/auth_provider.dart';
+import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:http/http.dart' as http;
@@ -33,12 +35,33 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
       setState(() => _isLoading = true);
 
       try {
+        String? fcmToken;
+        try {
+          fcmToken = await FirebaseMessaging.instance.getToken();
+        } catch (e) {
+          fcmToken = null;
+        }
+
+        final deviceType = Platform.isAndroid
+            ? 'android'
+            : (Platform.isIOS ? 'ios' : 'web');
+        final osName = Platform.isAndroid
+            ? 'Android'
+            : (Platform.isIOS ? 'iOS' : Platform.operatingSystem);
+
+        debugPrint(
+          'LOGIN PAYLOAD >> email=${_emailController.text}, fcmToken=$fcmToken, deviceType=$deviceType, osName=$osName',
+        );
+
         final response = await http.post(
           Uri.parse('${ApiConfig.baseUrl}${Endpoints.login}'),
           headers: {'Content-Type': ApiConfig.contentTypeJson},
           body: jsonEncode({
             'email': _emailController.text.trim(),
             'password': _passwordController.text,
+            'fcmToken': fcmToken ?? '',
+            'deviceType': deviceType,
+            'osName': osName,
           }),
         );
 
@@ -46,13 +69,15 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
 
         if (response.statusCode == 200 && responseData['token'] != null) {
           final tokenData = responseData['token'];
+          final userData = responseData['data'];
           final accessToken = tokenData['accessToken'];
           final refreshToken = tokenData['refreshToken'];
+          final userName = userData?['name'];
 
           if (accessToken != null && refreshToken != null) {
             await ref
                 .read(authProvider.notifier)
-                .saveLoginData(accessToken, refreshToken);
+                .saveLoginData(accessToken, refreshToken, userName);
 
             if (mounted) {
               Navigator.pushReplacement(

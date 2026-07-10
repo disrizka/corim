@@ -7,8 +7,9 @@ import 'package:http/http.dart' as http;
 class AuthState {
   final String? accessToken;
   final bool isAuthenticated;
+  final String? name;
 
-  AuthState({this.accessToken, this.isAuthenticated = false});
+  AuthState({this.accessToken, this.isAuthenticated = false, this.name});
 }
 
 class AuthNotifier extends Notifier<AuthState> {
@@ -54,14 +55,25 @@ class AuthNotifier extends Notifier<AuthState> {
     }
   }
 
-  Future<void> saveLoginData(String accessToken, String refreshToken) async {
+  Future<void> saveLoginData(
+    String accessToken,
+    String refreshToken, [
+    String? name,
+  ]) async {
     try {
       await _storage.write(key: StorageKeys.accessToken, value: accessToken);
       await _storage.write(key: StorageKeys.refreshToken, value: refreshToken);
+      if (name != null) {
+        await _storage.write(key: StorageKeys.userName, value: name);
+      }
       final loginTime = DateTime.now().toIso8601String();
       await _storage.write(key: 'login_time', value: loginTime);
       print('[AUTH] Token tersimpan, login time: $loginTime');
-      state = AuthState(accessToken: accessToken, isAuthenticated: true);
+      state = AuthState(
+        accessToken: accessToken,
+        isAuthenticated: true,
+        name: name,
+      );
     } catch (e) {
       print('[AUTH] Gagal simpan token: $e');
       await forceLogout();
@@ -73,6 +85,7 @@ class AuthNotifier extends Notifier<AuthState> {
     try {
       final accessToken = await _storage.read(key: StorageKeys.accessToken);
       final refreshToken = await _storage.read(key: StorageKeys.refreshToken);
+      final name = await _storage.read(key: StorageKeys.userName); 
 
       if (accessToken == null || refreshToken == null) {
         print('[INIT] Tidak ada token > Login Screen');
@@ -85,7 +98,11 @@ class AuthNotifier extends Notifier<AuthState> {
 
       if (!expired) {
         print('[INIT] Token valid > Home Screen');
-        state = AuthState(accessToken: accessToken, isAuthenticated: true);
+        state = AuthState(
+          accessToken: accessToken,
+          isAuthenticated: true,
+          name: name, 
+        );
         return;
       }
       print(' [INIT] Token expired > coba refresh...');

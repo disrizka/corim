@@ -13,4 +13,5 @@ class StorageKeys {
   static const String accessToken = "access_token";
   static const String refreshToken = "refresh_token";
   static const String loginTime = "login_time";
+  static const String userName = "user_name";
 }
