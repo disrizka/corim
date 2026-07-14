@@ -108,7 +108,7 @@ class HomeScreen extends ConsumerWidget {
                       color: Colors.white,
                       size: 26,
                     ),
-                    if (ref.watch(unreadNotificationCountProvider) > 0)
+                    if (ref.watch(pendingNotificationCountProvider) > 0)
                       Positioned(
                         right: -2,
                         top: -2,
@@ -123,7 +123,7 @@ class HomeScreen extends ConsumerWidget {
                             minHeight: 16,
                           ),
                           child: Text(
-                            '${ref.watch(unreadNotificationCountProvider)}',
+                            '${ref.watch(pendingNotificationCountProvider)}',
                             textAlign: TextAlign.center,
                             style: const TextStyle(
                               color: Colors.white,

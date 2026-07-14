@@ -7,6 +7,10 @@ class Endpoints {
   static const String login = "auth/login";
   static const String refreshToken = "auth/refresh-token";
   static const String clients = "clients";
+
+  static const String notifications = "notifications";
+  static String notificationDetail(String id) => "notifications/$id";
+  static String notificationAction(String id) => "notifications/$id/action";
 }
 
 class StorageKeys {

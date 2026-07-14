@@ -1,10 +1,29 @@
 import 'package:corim/auth/splash_screen.dart';
+import 'package:corim/notifications/notification_detail_screen.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'firebase_options.dart';
+
+final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
+
+String? _extractNotificationId(Map<String, dynamic> data) {
+  return data['notificationId']?.toString() ??
+      data['notification_id']?.toString() ??
+      data['id']?.toString();
+}
+
+void _openNotificationDetail(String id) {
+  final navigator = navigatorKey.currentState;
+  if (navigator == null) return;
+  navigator.push(
+    MaterialPageRoute(
+      builder: (_) => NotificationDetailScreen(notificationId: id),
+    ),
+  );
+}
 
 final FlutterLocalNotificationsPlugin _localNotificationsPlugin =
     FlutterLocalNotificationsPlugin();
@@ -38,7 +57,15 @@ void main() async {
     const InitializationSettings initializationSettings =
         InitializationSettings(android: initializationSettingsAndroid);
 
-    await _localNotificationsPlugin.initialize(initializationSettings);
+    await _localNotificationsPlugin.initialize(
+      initializationSettings,
+      onDidReceiveNotificationResponse: (details) {
+        final id = details.payload;
+        if (id != null && id.isNotEmpty) {
+          _openNotificationDetail(id);
+        }
+      },
+    );
 
     await _localNotificationsPlugin
         .resolvePlatformSpecificImplementation<
@@ -64,6 +91,7 @@ void main() async {
       AndroidNotification? android = message.notification?.android;
 
       if (notification != null && android != null) {
+        final notifId = _extractNotificationId(message.data);
         _localNotificationsPlugin.show(
           notification.hashCode,
           notification.title,
@@ -79,9 +107,29 @@ void main() async {
               playSound: true,
             ),
           ),
+          payload: notifId,
         );
       }
     });
+
+    FirebaseMessaging.onMessageOpenedApp.listen((RemoteMessage message) {
+      final id = _extractNotificationId(message.data);
+      if (id != null && id.isNotEmpty) {
+        _openNotificationDetail(id);
+      }
+    });
+
+    final initialMessage = await FirebaseMessaging.instance.getInitialMessage();
+    if (initialMessage != null) {
+      final id = _extractNotificationId(initialMessage.data);
+      if (id != null && id.isNotEmpty) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          Future.delayed(const Duration(milliseconds: 800), () {
+            _openNotificationDetail(id);
+          });
+        });
+      }
+    }
   } catch (e) {
     debugPrint("Firebase initialization failed: $e");
   }
@@ -95,6 +143,7 @@ class MyApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
+      navigatorKey: navigatorKey,
       title: 'Flutter Demo',
       debugShowCheckedModeBanner: false,
       theme: ThemeData(
