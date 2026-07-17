@@ -14,14 +14,17 @@ class AuthHttpClient extends http.BaseClient {
 
   bool _isRefreshing = false;
 
+  static const String _basicAuthKey =
+      'Basic bWFudWFsX2FwcDpkZGY0YjY1OTE2NTc2N2E2Mjc4NGY5NGM0ZWU1NmQwNzVkYjEwYzk0NTBkYTVjZjgxYjZhZjdiOWY1NmYxZWY3';
+
   AuthHttpClient(this._inner, this._ref);
 
   @override
   Future<http.StreamedResponse> send(http.BaseRequest request) async {
     final accessToken = await _storage.read(key: StorageKeys.accessToken);
-
+    request.headers['Authorization'] = _basicAuthKey;
     if (accessToken != null) {
-      request.headers['Authorization'] = 'Bearer $accessToken';
+      request.headers['Access-Token'] = 'Bearer $accessToken';
       print('[INTERCEPTOR] ${request.method} ${request.url}');
       print('[INTERCEPTOR] Token: ${accessToken.substring(0, 20)}...');
     }
@@ -70,7 +73,8 @@ class AuthHttpClient extends http.BaseClient {
   http.BaseRequest _cloneRequest(http.BaseRequest original, String newToken) {
     final clone = http.Request(original.method, original.url);
     clone.headers.addAll(original.headers);
-    clone.headers['Authorization'] = 'Bearer $newToken';
+    clone.headers['Authorization'] = _basicAuthKey;
+    clone.headers['Access-Token'] = 'Bearer $newToken';
     if (original is http.Request) {
       clone.body = original.body;
     }

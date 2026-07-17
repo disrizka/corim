@@ -3,6 +3,7 @@ import 'package:corim/notifications/notification_provider.dart';
 import 'package:corim/notifications/notification_style.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 class NotificationDetailScreen extends ConsumerStatefulWidget {
   final String notificationId;
@@ -17,7 +18,6 @@ class NotificationDetailScreen extends ConsumerStatefulWidget {
 class _NotificationDetailScreenState
     extends ConsumerState<NotificationDetailScreen> {
   final _noteController = TextEditingController();
-  bool _isSubmitting = false;
 
   @override
   void dispose() {
@@ -25,36 +25,38 @@ class _NotificationDetailScreenState
     super.dispose();
   }
 
-  Future<void> _submit(bool approve) async {
-    setState(() => _isSubmitting = true);
-    final ok = await ref
-        .read(notificationListProvider.notifier)
-        .sendAction(
-          widget.notificationId,
-          approve: approve,
-          note: _noteController.text.trim(),
-        );
+  Future<void> _openFile(dynamic file) async {
+    String url;
+    String label = 'file';
+
+    if (file is String) {
+      url = file;
+      label = file.split('/').last;
+    } else if (file is Map) {
+      url = (file['url'] ?? file['path'] ?? '').toString();
+      label = (file['name'] ?? file['fileName'] ?? url.split('/').last)
+          .toString();
+    } else {
+      return;
+    }
+
+    if (url.isEmpty) return;
+
+    final uri = Uri.tryParse(url);
+    if (uri == null) return;
+
+    final canOpen = await canLaunchUrl(uri);
     if (!mounted) return;
-    setState(() => _isSubmitting = false);
 
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        behavior: SnackBarBehavior.floating,
-        backgroundColor: ok
-            ? (approve ? const Color(0xFF16A34A) : const Color(0xFFB91C1C))
-            : Colors.grey.shade800,
-        content: Text(
-          ok
-              ? (approve ? 'Permintaan disetujui' : 'Permintaan ditolak')
-              : 'Gagal memproses permintaan, coba lagi',
+    if (canOpen) {
+      await launchUrl(uri, mode: LaunchMode.externalApplication);
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          behavior: SnackBarBehavior.floating,
+          content: Text('Unable to open $label'),
         ),
-      ),
-    );
-
-    if (ok) {
-      ref
-          .read(notificationDetailProvider(widget.notificationId).notifier)
-          .fetch();
+      );
     }
   }
 
@@ -90,29 +92,33 @@ class _NotificationDetailScreenState
       decoration: const BoxDecoration(gradient: NotifColors.brandGradient),
       child: SafeArea(
         bottom: false,
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(4, 4, 8, 18),
-          child: Row(
-            children: [
-              IconButton(
-                onPressed: () => Navigator.pop(context),
-                icon: const Icon(Icons.arrow_back, color: Colors.white),
-              ),
-              const Expanded(
-                child: Text(
-                  'Detail Pemberitahuan',
-                  style: TextStyle(
-                    color: Colors.white,
-                    fontSize: 18,
-                    fontWeight: FontWeight.w700,
+        child: SizedBox(
+          height: kToolbarHeight,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 4),
+            child: Row(
+              children: [
+                IconButton(
+                  onPressed: () => Navigator.pop(context),
+                  icon: const Icon(Icons.arrow_back, color: Colors.white),
+                ),
+                const Expanded(
+                  child: Text(
+                    'Notification Detail',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 16,
+                      fontWeight: FontWeight.w700,
+                    ),
                   ),
                 ),
-              ),
-              IconButton(
-                onPressed: () => Navigator.pop(context),
-                icon: const Icon(Icons.close, color: Colors.white),
-              ),
-            ],
+                IconButton(
+                  onPressed: () => Navigator.pop(context),
+                  icon: const Icon(Icons.close, color: Colors.white),
+                  iconSize: 20,
+                ),
+              ],
+            ),
           ),
         ),
       ),
@@ -141,7 +147,7 @@ class _NotificationDetailScreenState
             ),
             const SizedBox(height: 16),
             const Text(
-              'Gagal memuat detail pemberitahuan',
+              'Failed to load notification detail',
               style: TextStyle(
                 fontSize: 15,
                 fontWeight: FontWeight.w600,
@@ -174,7 +180,7 @@ class _NotificationDetailScreenState
                   ),
                 ),
                 child: const Text(
-                  'Coba lagi',
+                  'Retry',
                   style: TextStyle(fontWeight: FontWeight.w600),
                 ),
               ),
@@ -202,44 +208,66 @@ class _NotificationDetailScreenState
             ],
           ),
           const SizedBox(height: 14),
-          Text(
-            n.title,
-            style: const TextStyle(
-              fontSize: 21,
-              fontWeight: FontWeight.w700,
-              color: NotifColors.textPrimary,
-            ),
-          ),
-          const SizedBox(height: 20),
 
           _buildInfoCard(n),
 
           const SizedBox(height: 16),
-          _buildLabelBlock(
-            'KETERANGAN',
-            child: Container(
-              width: double.infinity,
-              padding: const EdgeInsets.all(14),
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: NotifColors.cardBorder),
-              ),
-              child: Text(
-                n.desc,
-                style: const TextStyle(
-                  fontSize: 14,
-                  color: NotifColors.textPrimary,
-                  height: 1.5,
+
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(color: NotifColors.cardBorder),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'TITLE STATUS',
+                  style: TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w600,
+                    letterSpacing: 0.5,
+                    color: Colors.grey.shade500,
+                  ),
                 ),
-              ),
+                const SizedBox(height: 6),
+                Text(
+                  n.title,
+                  style: const TextStyle(
+                    fontSize: 14,
+                    color: NotifColors.textPrimary,
+                  ),
+                ),
+                const SizedBox(height: 16),
+                Text(
+                  'DESCRIPTION',
+                  style: TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w600,
+                    letterSpacing: 0.5,
+                    color: Colors.grey.shade500,
+                  ),
+                ),
+                const SizedBox(height: 6),
+                Text(
+                  n.desc,
+                  style: const TextStyle(
+                    fontSize: 14,
+                    color: NotifColors.textPrimary,
+                    height: 1.5,
+                  ),
+                ),
+              ],
             ),
           ),
 
           if (n.note != null && n.note!.trim().isNotEmpty) ...[
             const SizedBox(height: 16),
             _buildLabelBlock(
-              'CATATAN APPROVAL',
+              'APPROVAL NOTE',
               child: Container(
                 width: double.infinity,
                 padding: const EdgeInsets.all(14),
@@ -259,84 +287,66 @@ class _NotificationDetailScreenState
             ),
           ],
 
-          if (n.isPending) ...[
-            const SizedBox(height: 24),
-            Text(
-              'Tindakan Approval',
-              style: TextStyle(
-                fontSize: 12,
-                fontWeight: FontWeight.w600,
-                color: Colors.grey.shade500,
-                letterSpacing: 0.3,
-              ),
-            ),
-            const SizedBox(height: 10),
-            TextField(
-              controller: _noteController,
-              style: const TextStyle(fontSize: 13),
-              minLines: 2,
-              maxLines: 4,
-              decoration: InputDecoration(
-                hintText: 'Tambahkan catatan (opsional)',
-                hintStyle: TextStyle(fontSize: 13, color: Colors.grey.shade400),
-                filled: true,
-                fillColor: Colors.white,
-                contentPadding: const EdgeInsets.all(14),
-                border: OutlineInputBorder(
+          if (n.files.isNotEmpty) ...[
+            const SizedBox(height: 16),
+            _buildLabelBlock(
+              'ATTACHMENTS',
+              child: Container(
+                width: double.infinity,
+                decoration: BoxDecoration(
+                  color: Colors.white,
                   borderRadius: BorderRadius.circular(12),
-                  borderSide: const BorderSide(color: NotifColors.cardBorder),
+                  border: Border.all(color: NotifColors.cardBorder),
                 ),
-                enabledBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
-                  borderSide: const BorderSide(color: NotifColors.cardBorder),
+                child: Column(
+                  children: [
+                    for (int i = 0; i < n.files.length; i++) ...[
+                      if (i > 0)
+                        const Divider(height: 1, color: NotifColors.divider),
+                      InkWell(
+                        onTap: () => _openFile(n.files[i]),
+                        borderRadius: BorderRadius.circular(12),
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 14,
+                            vertical: 12,
+                          ),
+                          child: Row(
+                            children: [
+                              const Icon(
+                                Icons.insert_drive_file_outlined,
+                                size: 20,
+                                color: NotifColors.gradientEnd,
+                              ),
+                              const SizedBox(width: 10),
+                              Expanded(
+                                child: Text(
+                                  n.files[i] is Map
+                                      ? (n.files[i]['name'] ??
+                                                n.files[i]['fileName'] ??
+                                                'Attachment ${i + 1}')
+                                            .toString()
+                                      : n.files[i].toString().split('/').last,
+                                  style: const TextStyle(
+                                    fontSize: 13.5,
+                                    color: NotifColors.textPrimary,
+                                  ),
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ),
+                              Icon(
+                                Icons.open_in_new,
+                                size: 16,
+                                color: Colors.grey.shade400,
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ],
+                  ],
                 ),
               ),
-            ),
-            const SizedBox(height: 12),
-            Row(
-              children: [
-                Expanded(
-                  child: OutlinedButton.icon(
-                    onPressed: _isSubmitting ? null : () => _submit(false),
-                    icon: const Icon(Icons.close_rounded, size: 18),
-                    label: const Text('Tolak'),
-                    style: OutlinedButton.styleFrom(
-                      foregroundColor: const Color(0xFFB91C1C),
-                      side: const BorderSide(color: Color(0xFFFCA5A5)),
-                      padding: const EdgeInsets.symmetric(vertical: 14),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: ElevatedButton.icon(
-                    onPressed: _isSubmitting ? null : () => _submit(true),
-                    icon: _isSubmitting
-                        ? const SizedBox(
-                            width: 16,
-                            height: 16,
-                            child: CircularProgressIndicator(
-                              strokeWidth: 2,
-                              color: Colors.white,
-                            ),
-                          )
-                        : const Icon(Icons.check_rounded, size: 18),
-                    label: const Text('Setujui'),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: const Color(0xFF16A34A),
-                      foregroundColor: Colors.white,
-                      elevation: 0,
-                      padding: const EdgeInsets.symmetric(vertical: 14),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                    ),
-                  ),
-                ),
-              ],
             ),
           ],
 
@@ -354,13 +364,13 @@ class _NotificationDetailScreenState
                   ScaffoldMessenger.of(context).showSnackBar(
                     const SnackBar(
                       behavior: SnackBarBehavior.floating,
-                      content: Text('Detail proyek belum tersedia'),
+                      content: Text('Project detail not available yet'),
                     ),
                   );
                 },
                 icon: const Icon(Icons.open_in_new, size: 18),
                 label: const Text(
-                  'Lihat Detail Proyek',
+                  'View Project Detail',
                   style: TextStyle(fontWeight: FontWeight.w600),
                 ),
                 style: ElevatedButton.styleFrom(
@@ -391,17 +401,17 @@ class _NotificationDetailScreenState
       ),
       child: Column(
         children: [
-          _infoRow(Icons.folder_outlined, 'Proyek', n.projectName),
+          _infoRow(Icons.folder_outlined, 'Project', n.projectName),
           const Padding(
             padding: EdgeInsets.symmetric(vertical: 12),
             child: Divider(height: 1, color: NotifColors.divider),
           ),
-          _infoRow(Icons.person_outline, 'Diminta oleh', n.requestedBy),
+          _infoRow(Icons.person_outline, 'Requested By', n.requestedBy),
           const Padding(
             padding: EdgeInsets.symmetric(vertical: 12),
             child: Divider(height: 1, color: NotifColors.divider),
           ),
-          _infoRow(Icons.access_time, 'Waktu', n.activityTime),
+          _infoRow(Icons.access_time, 'Time', n.activityTime),
         ],
       ),
     );

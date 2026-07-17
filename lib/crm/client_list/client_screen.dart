@@ -1,5 +1,6 @@
-import 'package:corim/crm/client/client_model.dart';
-import 'package:corim/crm/client/client_provider.dart';
+import 'package:corim/crm/client_detail/client_detail_screen.dart';
+import 'package:corim/crm/client_list/client_model.dart';
+import 'package:corim/crm/client_list/client_provider.dart';
 import 'package:corim/main_button_nav.dart';
 import 'package:corim/notifications/notifcation_screen.dart';
 import 'package:flutter/material.dart';
@@ -260,7 +261,20 @@ class _ClientListScreenState extends ConsumerState<ClientListScreen> {
                     .map(
                       (client) => Padding(
                         padding: const EdgeInsets.only(bottom: 12),
-                        child: _buildClientCard(client),
+                        child: GestureDetector(
+                          onTap: () {
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (_) => ClientDetailScreen(
+                                  clientId: client.id,
+                                  companyName: client.companyName,
+                                ),
+                              ),
+                            );
+                          },
+                          child: _buildClientCard(client),
+                        ),
                       ),
                     )
                     .toList(),

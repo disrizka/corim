@@ -10,19 +10,30 @@ import 'firebase_options.dart';
 final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
 
 String? _extractNotificationId(Map<String, dynamic> data) {
-  return data['notificationId']?.toString() ??
+  debugPrint('[NOTIF DEBUG] raw data payload: $data');
+
+  final id =
+      data['notificationId']?.toString() ??
       data['notification_id']?.toString() ??
       data['id']?.toString();
+
+  debugPrint('[NOTIF DEBUG] extracted id: $id');
+  return id;
 }
 
 void _openNotificationDetail(String id) {
+  debugPrint('[NOTIF DEBUG] _openNotificationDetail called with id=$id');
   final navigator = navigatorKey.currentState;
-  if (navigator == null) return;
+  if (navigator == null) {
+    debugPrint('[NOTIF DEBUG] navigatorKey.currentState is NULL, batal push');
+    return;
+  }
   navigator.push(
     MaterialPageRoute(
       builder: (_) => NotificationDetailScreen(notificationId: id),
     ),
   );
+  debugPrint('[NOTIF DEBUG] push berhasil dipanggil');
 }
 
 final FlutterLocalNotificationsPlugin _localNotificationsPlugin =
@@ -60,9 +71,14 @@ void main() async {
     await _localNotificationsPlugin.initialize(
       initializationSettings,
       onDidReceiveNotificationResponse: (details) {
+        debugPrint(
+          '[NOTIF DEBUG] onDidReceiveNotificationResponse, payload=${details.payload}',
+        );
         final id = details.payload;
         if (id != null && id.isNotEmpty) {
           _openNotificationDetail(id);
+        } else {
+          debugPrint('[NOTIF DEBUG] payload kosong/null, tidak navigasi');
         }
       },
     );
@@ -81,12 +97,23 @@ void main() async {
         );
 
     FirebaseMessaging messaging = FirebaseMessaging.instance;
-    await messaging.requestPermission(alert: true, badge: true, sound: true);
+    final settings = await messaging.requestPermission(
+      alert: true,
+      badge: true,
+      sound: true,
+    );
+    debugPrint(
+      '[NOTIF DEBUG] permission status: ${settings.authorizationStatus}',
+    );
 
     String? fcmToken = await messaging.getToken();
     debugPrint("FCM TOKEN FLUTTER: $fcmToken");
 
     FirebaseMessaging.onMessage.listen((RemoteMessage message) {
+      debugPrint(
+        '[NOTIF DEBUG] onMessage diterima. notification=${message.notification?.title}, data=${message.data}',
+      );
+
       RemoteNotification? notification = message.notification;
       AndroidNotification? android = message.notification?.android;
 
@@ -109,17 +136,30 @@ void main() async {
           ),
           payload: notifId,
         );
+        debugPrint(
+          '[NOTIF DEBUG] local notification ditampilkan dengan payload=$notifId',
+        );
+      } else {
+        debugPrint(
+          '[NOTIF DEBUG] notification atau android null -> tidak ada local notif yang ditampilkan (kemungkinan data-only message)',
+        );
       }
     });
 
     FirebaseMessaging.onMessageOpenedApp.listen((RemoteMessage message) {
+      debugPrint(
+        '[NOTIF DEBUG] onMessageOpenedApp diterima. data=${message.data}',
+      );
       final id = _extractNotificationId(message.data);
       if (id != null && id.isNotEmpty) {
         _openNotificationDetail(id);
+      } else {
+        debugPrint('[NOTIF DEBUG] id null/kosong dari onMessageOpenedApp');
       }
     });
 
     final initialMessage = await FirebaseMessaging.instance.getInitialMessage();
+    debugPrint('[NOTIF DEBUG] getInitialMessage: ${initialMessage?.data}');
     if (initialMessage != null) {
       final id = _extractNotificationId(initialMessage.data);
       if (id != null && id.isNotEmpty) {
@@ -128,10 +168,13 @@ void main() async {
             _openNotificationDetail(id);
           });
         });
+      } else {
+        debugPrint('[NOTIF DEBUG] id null/kosong dari getInitialMessage');
       }
     }
-  } catch (e) {
+  } catch (e, st) {
     debugPrint("Firebase initialization failed: $e");
+    debugPrint("$st");
   }
 
   runApp(const ProviderScope(child: MyApp()));

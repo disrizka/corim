@@ -1,7 +1,7 @@
 import 'package:corim/admin/home/home_screen.dart';
 import 'package:corim/auth/auth_provider.dart';
 import 'package:corim/auth/login_screen.dart';
-import 'package:corim/crm/client/client_screen.dart';
+import 'package:corim/crm/client_list/client_screen.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -74,9 +74,7 @@ class MainBottomNav extends ConsumerWidget {
               context,
               asset: 'assets/images/home/nav/list.png',
               item: MainNavItem.list,
-              onTap: () {
-                // TODO: arahkan ke halaman list kalau sudah ada screen-nya
-              },
+              onTap: () {},
             ),
           ],
         ),

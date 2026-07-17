@@ -1,7 +1,7 @@
 import 'dart:convert';
 import 'package:corim/auth/auth_provider.dart';
 import 'package:corim/api/api.dart';
-import 'package:corim/crm/client/client_model.dart';
+import 'package:corim/crm/client_list/client_model.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_riverpod/legacy.dart';
 import 'package:http/http.dart' as http;

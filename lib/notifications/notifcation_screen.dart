@@ -11,13 +11,13 @@ extension on _NotifFilter {
   String get label {
     switch (this) {
       case _NotifFilter.all:
-        return 'Semua';
+        return 'All';
       case _NotifFilter.pending:
-        return 'Tertunda';
+        return 'Pending';
       case _NotifFilter.approved:
-        return 'Disetujui';
+        return 'Approved';
       case _NotifFilter.rejected:
-        return 'Ditolak';
+        return 'Rejected';
     }
   }
 
@@ -63,7 +63,11 @@ class _NotificationScreenState extends ConsumerState<NotificationScreen> {
           Expanded(
             child: notificationsAsync.when(
               data: (items) {
-                final filtered = items.where(_filter.matches).toList();
+                final filtered = items.where(_filter.matches).toList()
+                  ..sort((a, b) {
+                    int rank(NotificationItem n) => n.isPending ? 0 : 1;
+                    return rank(a).compareTo(rank(b));
+                  });
                 if (items.isEmpty) return _buildEmptyState();
                 if (filtered.isEmpty) return _buildEmptyFilterState();
 
@@ -106,51 +110,48 @@ class _NotificationScreenState extends ConsumerState<NotificationScreen> {
       decoration: const BoxDecoration(gradient: NotifColors.brandGradient),
       child: SafeArea(
         bottom: false,
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(4, 4, 16, 18),
-          child: Row(
-            children: [
-              IconButton(
-                onPressed: () => Navigator.pop(context),
-                icon: const Icon(Icons.arrow_back, color: Colors.white),
-              ),
-              const Expanded(
-                child: Text(
-                  'Pemberitahuan',
-                  style: TextStyle(
-                    color: Colors.white,
-                    fontSize: 18,
-                    fontWeight: FontWeight.w700,
-                  ),
+        child: SizedBox(
+          height: kToolbarHeight,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 4),
+            child: Row(
+              children: [
+                IconButton(
+                  onPressed: () => Navigator.pop(context),
+                  icon: const Icon(Icons.arrow_back, color: Colors.white),
                 ),
-              ),
-              if (pendingCount > 0)
-                Container(
-                  margin: const EdgeInsets.only(right: 6),
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 10,
-                    vertical: 5,
-                  ),
-                  decoration: BoxDecoration(
-                    color: Colors.white.withOpacity(0.16),
-                    borderRadius: BorderRadius.circular(20),
-                  ),
+                const Expanded(
                   child: Text(
-                    '$pendingCount tertunda',
-                    style: const TextStyle(
+                    'Notifications',
+                    style: TextStyle(
                       color: Colors.white,
-                      fontSize: 11,
-                      fontWeight: FontWeight.w600,
+                      fontSize: 16,
+                      fontWeight: FontWeight.w700,
                     ),
                   ),
                 ),
-              IconButton(
-                onPressed: () =>
-                    ref.read(notificationListProvider.notifier).fetch(),
-                icon: const Icon(Icons.refresh, color: Colors.white, size: 22),
-                tooltip: 'Muat ulang',
-              ),
-            ],
+                if (pendingCount > 0)
+                  Container(
+                    margin: const EdgeInsets.only(right: 12),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 10,
+                      vertical: 5,
+                    ),
+                    decoration: BoxDecoration(
+                      color: Colors.white.withOpacity(0.16),
+                      borderRadius: BorderRadius.circular(20),
+                    ),
+                    child: Text(
+                      '$pendingCount pending',
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 11,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ),
+              ],
+            ),
           ),
         ),
       ),
@@ -221,7 +222,7 @@ class _NotificationScreenState extends ConsumerState<NotificationScreen> {
             ),
             const SizedBox(height: 16),
             const Text(
-              'Belum ada notifikasi',
+              'No notifications yet',
               style: TextStyle(
                 fontSize: 15,
                 fontWeight: FontWeight.w600,
@@ -230,7 +231,7 @@ class _NotificationScreenState extends ConsumerState<NotificationScreen> {
             ),
             const SizedBox(height: 6),
             Text(
-              'Permintaan approval baru akan muncul di sini.',
+              'New approval requests will appear here.',
               textAlign: TextAlign.center,
               style: TextStyle(fontSize: 13, color: Colors.grey.shade500),
             ),
@@ -254,7 +255,7 @@ class _NotificationScreenState extends ConsumerState<NotificationScreen> {
             ),
             const SizedBox(height: 12),
             Text(
-              'Tidak ada notifikasi "${_filter.label}"',
+              'No "${_filter.label}" notifications',
               style: TextStyle(fontSize: 13, color: Colors.grey.shade500),
             ),
           ],
@@ -285,7 +286,7 @@ class _NotificationScreenState extends ConsumerState<NotificationScreen> {
             ),
             const SizedBox(height: 16),
             const Text(
-              'Gagal memuat notifikasi',
+              'Failed to load notifications',
               style: TextStyle(
                 fontSize: 15,
                 fontWeight: FontWeight.w600,
@@ -313,7 +314,7 @@ class _NotificationScreenState extends ConsumerState<NotificationScreen> {
                   ),
                 ),
                 child: const Text(
-                  'Coba lagi',
+                  'Retry',
                   style: TextStyle(fontWeight: FontWeight.w600),
                 ),
               ),
@@ -364,8 +365,8 @@ class _NotificationCardState extends ConsumerState<_NotificationCard> {
             : Colors.grey.shade800,
         content: Text(
           ok
-              ? (approve ? 'Permintaan disetujui' : 'Permintaan ditolak')
-              : 'Gagal memproses permintaan, coba lagi',
+              ? (approve ? 'Request approved' : 'Request rejected')
+              : 'Failed to process request, please try again',
         ),
       ),
     );
@@ -481,6 +482,13 @@ class _NotificationCardState extends ConsumerState<_NotificationCard> {
                     _metaChip(Icons.person_outline, n.requestedBy),
                     _metaChip(Icons.calendar_today_outlined, n.activityDateId),
                     _metaChip(Icons.access_time, n.activityTime),
+                    if (n.files.isNotEmpty)
+                      _metaChip(
+                        Icons.attach_file_rounded,
+                        n.files.length > 1
+                            ? '${n.files.length} files'
+                            : '1 file',
+                      ),
                   ],
                 ),
                 if (n.isPending) ...[
@@ -493,7 +501,7 @@ class _NotificationCardState extends ConsumerState<_NotificationCard> {
                     minLines: 1,
                     maxLines: 3,
                     decoration: InputDecoration(
-                      hintText: 'Tambahkan catatan (opsional)',
+                      hintText: 'Add a note (optional)',
                       hintStyle: TextStyle(
                         fontSize: 13,
                         color: Colors.grey.shade400,
@@ -519,7 +527,7 @@ class _NotificationCardState extends ConsumerState<_NotificationCard> {
                               ? null
                               : () => _submit(false),
                           icon: const Icon(Icons.close_rounded, size: 17),
-                          label: const Text('Tolak'),
+                          label: const Text('Reject'),
                           style: OutlinedButton.styleFrom(
                             foregroundColor: const Color(0xFFB91C1C),
                             side: const BorderSide(color: Color(0xFFFCA5A5)),
@@ -544,7 +552,7 @@ class _NotificationCardState extends ConsumerState<_NotificationCard> {
                                   ),
                                 )
                               : const Icon(Icons.check_rounded, size: 17),
-                          label: const Text('Setujui'),
+                          label: const Text('Approve'),
                           style: ElevatedButton.styleFrom(
                             backgroundColor: const Color(0xFF16A34A),
                             foregroundColor: Colors.white,
@@ -568,7 +576,7 @@ class _NotificationCardState extends ConsumerState<_NotificationCard> {
                       borderRadius: BorderRadius.circular(10),
                     ),
                     child: Text(
-                      'Catatan: ${n.note}',
+                      'Note: ${n.note}',
                       style: TextStyle(
                         fontSize: 12,
                         color: Colors.grey.shade600,

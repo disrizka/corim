@@ -1,5 +1,5 @@
 import 'package:corim/auth/auth_provider.dart';
-import 'package:corim/crm/client/client_screen.dart';
+import 'package:corim/crm/client_list/client_screen.dart';
 import 'package:corim/main_button_nav.dart';
 import 'package:corim/notifications/notifcation_screen.dart';
 import 'package:corim/notifications/notification_provider.dart';
