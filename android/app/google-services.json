@@ -7,6 +7,25 @@
   "client": [
     {
       "client_info": {
+        "mobilesdk_app_id": "1:1052779949245:android:bef3fbee7c42bd22c45bd4",
+        "android_client_info": {
+          "package_name": "com.corim.apex"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCNmp5HOJ-_hd73SVUtKrKkXQameIfSSr8"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    },
+    {
+      "client_info": {
         "mobilesdk_app_id": "1:1052779949245:android:96be83bf7bc6247ec45bd4",
         "android_client_info": {
           "package_name": "com.example.corim"

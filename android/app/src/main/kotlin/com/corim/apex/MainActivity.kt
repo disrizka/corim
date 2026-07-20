@@ -1,4 +1,4 @@
-package com.example.corim
+package com.corim.apex
 
 import io.flutter.embedding.android.FlutterActivity
 
