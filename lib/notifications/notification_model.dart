@@ -1,3 +1,5 @@
+enum RequestKind { salesEscalation, expenseRequest }
+
 class NotificationItem {
   final String id;
   final String notificationType;
@@ -14,6 +16,8 @@ class NotificationItem {
   final List<dynamic> files;
   final String approvalStatus;
   final String? note;
+  final String entity;
+  final String clientName;
 
   const NotificationItem({
     required this.id,
@@ -31,11 +35,24 @@ class NotificationItem {
     required this.files,
     required this.approvalStatus,
     this.note,
+    this.entity = '-',
+    this.clientName = '-',
   });
 
   bool get isPending => approvalStatus.toUpperCase() == 'PENDING';
   bool get isApproved => approvalStatus.toUpperCase() == 'APPROVED';
   bool get isRejected => approvalStatus.toUpperCase() == 'REJECTED';
+
+
+  RequestKind get kind {
+    final t = notificationType.toUpperCase();
+    if (t.contains('EXPENSE') || t.contains('FINANCE')) {
+      return RequestKind.expenseRequest;
+    }
+    return RequestKind.salesEscalation;
+  }
+
+  bool get isExpenseRequest => kind == RequestKind.expenseRequest;
 
   String get activityDateId {
     const monthMap = {
@@ -76,6 +93,8 @@ class NotificationItem {
       files: files,
       approvalStatus: approvalStatus ?? this.approvalStatus,
       note: note ?? this.note,
+      entity: entity,
+      clientName: clientName,
     );
   }
 
@@ -98,6 +117,8 @@ class NotificationItem {
           : const [],
       approvalStatus: (json['approvalStatus'] ?? 'PENDING').toString(),
       note: json['note']?.toString(),
+      entity: (json['entity'] ?? '-').toString(),
+      clientName: (json['clientName'] ?? '-').toString(),
     );
   }
 }

@@ -39,7 +39,7 @@ class NotifStatus {
     bg: Color(0xFFFEF3C7),
     fg: Color(0xFF92400E),
     accent: Color(0xFFF59E0B),
-    label: 'TERTUNDA',
+    label: 'PENDING',
     icon: Icons.hourglass_top_rounded,
   );
 
@@ -47,7 +47,7 @@ class NotifStatus {
     bg: Color(0xFFDCFCE7),
     fg: Color(0xFF166534),
     accent: Color(0xFF16A34A),
-    label: 'DISETUJUI',
+    label: 'APPROVED',
     icon: Icons.check_circle_rounded,
   );
 
@@ -55,7 +55,7 @@ class NotifStatus {
     bg: Color(0xFFFEE2E2),
     fg: Color(0xFF991B1B),
     accent: Color(0xFFDC2626),
-    label: 'DITOLAK',
+    label: 'REJECTED',
     icon: Icons.cancel_rounded,
   );
 

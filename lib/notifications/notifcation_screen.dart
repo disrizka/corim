@@ -1,3 +1,4 @@
+import 'package:corim/admin/project/project_detail_screen.dart';
 import 'package:corim/notifications/notification_detail_screen.dart';
 import 'package:corim/notifications/notification_model.dart';
 import 'package:corim/notifications/notification_provider.dart';
@@ -382,6 +383,25 @@ class _NotificationCardState extends ConsumerState<_NotificationCard> {
     );
   }
 
+  void _openProject() {
+    final projectId = widget.item.projectId.trim();
+    if (projectId.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          behavior: SnackBarBehavior.floating,
+          content: Text('No project linked to this notification'),
+        ),
+      );
+      return;
+    }
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => ProjectDetailScreen(projectId: projectId),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final n = widget.item;
@@ -490,6 +510,27 @@ class _NotificationCardState extends ConsumerState<_NotificationCard> {
                             : '1 file',
                       ),
                   ],
+                ),
+                const SizedBox(height: 10),
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: TextButton.icon(
+                    onPressed: _openProject,
+                    icon: const Icon(Icons.open_in_new_rounded, size: 15),
+                    label: const Text(
+                      'View Project',
+                      style: TextStyle(
+                        fontSize: 12.5,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    style: TextButton.styleFrom(
+                      foregroundColor: const Color(0xFF075985),
+                      padding: EdgeInsets.zero,
+                      minimumSize: const Size(0, 0),
+                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                    ),
+                  ),
                 ),
                 if (n.isPending) ...[
                   const SizedBox(height: 14),
