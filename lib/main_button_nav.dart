@@ -1,7 +1,6 @@
 import 'package:corim/admin/home/home_screen.dart';
-import 'package:corim/auth/auth_provider.dart';
-import 'package:corim/auth/login_screen.dart';
 import 'package:corim/crm/client_list/client_screen.dart';
+import 'package:corim/profile/profile_screen.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -59,7 +58,12 @@ class MainBottomNav extends ConsumerWidget {
               },
             ),
             GestureDetector(
-              onTap: () => _handleLogout(context, ref),
+              onTap: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (_) => const ProfileScreen()),
+                );
+              },
               child: Padding(
                 padding: const EdgeInsets.all(12),
                 child: Image.asset(
@@ -80,63 +84,6 @@ class MainBottomNav extends ConsumerWidget {
         ),
       ),
     );
-  }
-
-  Future<void> _handleLogout(BuildContext context, WidgetRef ref) async {
-    final confirm = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: const Text(
-          'Keluar Aplikasi',
-          style: TextStyle(fontWeight: FontWeight.w700, fontSize: 16),
-        ),
-        content: const Text(
-          'Apakah Anda yakin ingin keluar dari aplikasi?',
-          style: TextStyle(fontSize: 14, color: Color(0xFF555555)),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, false),
-            child: const Text(
-              'Batal',
-              style: TextStyle(color: Color(0xFF555555)),
-            ),
-          ),
-          DecoratedBox(
-            decoration: BoxDecoration(
-              gradient: const LinearGradient(
-                colors: [Color(0xFF1B1C52), Color(0xFF075985)],
-              ),
-              borderRadius: BorderRadius.circular(8),
-            ),
-            child: ElevatedButton(
-              onPressed: () => Navigator.pop(ctx, true),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.transparent,
-                foregroundColor: Colors.white,
-                shadowColor: Colors.transparent,
-                elevation: 0,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(8),
-                ),
-              ),
-              child: const Text('Keluar'),
-            ),
-          ),
-        ],
-      ),
-    );
-
-    if (confirm == true && context.mounted) {
-      await ref.read(authProvider.notifier).forceLogout();
-      if (context.mounted) {
-        Navigator.pushReplacement(
-          context,
-          MaterialPageRoute(builder: (context) => const LoginScreen()),
-        );
-      }
-    }
   }
 
   Widget _navImageItem(

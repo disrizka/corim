@@ -2,15 +2,13 @@ class ApiConfig {
   static const String baseUrl = "https://corim-api.eon.id/";
   static const String contentTypeJson = "application/json";
 
-  // Base URL untuk file/dokumen yang disimpan di storage/CDN backend.
-  // Publik (tanpa underscore) supaya bisa dipakai dari file lain,
-  // mis. notification_detail_screen.dart.
   static const String storageBaseUrl = '${baseUrl}storage/';
 }
 
 class Endpoints {
   static const String login = "auth/login";
   static const String refreshToken = "auth/refresh-token";
+  static const String profile = "profile";
   static const String clients = "clients";
   static String clientDetail(String id) => "clients/$id";
   static const String projects = "projects";
