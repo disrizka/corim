@@ -114,8 +114,6 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      // Body tidak resize saat keyboard muncul, jadi footer di bawah
-      // tetap diam di posisinya dan tidak ikut terdorong naik.
       resizeToAvoidBottomInset: false,
       body: Stack(
         children: [

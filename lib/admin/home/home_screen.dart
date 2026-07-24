@@ -1,7 +1,7 @@
 import 'package:corim/admin/home/greeting_provider.dart';
 import 'package:corim/auth/auth_provider.dart';
-import 'package:corim/crm/client_list/client_screen.dart';
 import 'package:corim/crm/menu_screen.dart';
+import 'package:corim/finance/finance_menu_screen.dart';
 import 'package:corim/main_button_nav.dart';
 import 'package:corim/notifications/notifcation_screen.dart';
 import 'package:corim/notifications/notification_detail_screen.dart';
@@ -261,7 +261,12 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
       {
         'asset': 'assets/images/home/finance.png',
         'label': 'FINANCE',
-        'onTap': () {},
+        'onTap': () {
+          Navigator.push(
+            context,
+            MaterialPageRoute(builder: (_) => const FinanceMenuScreen()),
+          );
+        },
       },
       {
         'asset': 'assets/images/home/hr.png',

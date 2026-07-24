@@ -32,8 +32,6 @@ const _monthMap = {
   'dec': 12,
 };
 
-/// Parses API date strings like "22 Jul 2026" into a [DateTime].
-/// Returns null if the string is empty, "-", or unparsable.
 DateTime? _parseApiDate(String raw) {
   final value = raw.trim();
   if (value.isEmpty || value == '-') return null;
@@ -53,9 +51,6 @@ DateTime? _parseApiDate(String raw) {
   return DateTime(year, month, day);
 }
 
-/// Fetches the full project list from `GET /projects`, walking through every
-/// page reported in the `page` metadata so counts/summary reflect *all*
-/// projects, not just the first page.
 final projectListProvider = FutureProvider.autoDispose<List<ProjectListItem>>((
   ref,
 ) async {
@@ -87,14 +82,6 @@ final projectListProvider = FutureProvider.autoDispose<List<ProjectListItem>>((
   return allProjects;
 });
 
-/// Derives the "New / Ontime / Delay" project summary from the list result.
-///
-/// Assumption (no dedicated status field is returned by the API for this):
-/// - `projectStatus == 'Won'` → finished, excluded from this breakdown.
-/// - Otherwise, based on `expectedEndDate`:
-///   - empty/missing → New Project (no timeline set yet)
-///   - date is today or later → Ontime Project
-///   - date already passed → Delay Project
 final projectStatusSummaryProvider = Provider<ProjectStatusSummary>((ref) {
   final listAsync = ref.watch(projectListProvider);
 

@@ -144,6 +144,23 @@ final pendingNotificationCountProvider = Provider<int>((ref) {
   );
 });
 
+final expenseRequestListProvider = Provider<AsyncValue<List<NotificationItem>>>(
+  (ref) {
+    final state = ref.watch(notificationListProvider);
+    return state.whenData(
+      (items) => items.where((n) => n.isExpenseRequest).toList(),
+    );
+  },
+);
+
+final pendingExpenseRequestCountProvider = Provider<int>((ref) {
+  final state = ref.watch(expenseRequestListProvider);
+  return state.maybeWhen(
+    data: (items) => items.where((n) => n.isPending).length,
+    orElse: () => 0,
+  );
+});
+
 class NotificationDetailNotifier
     extends StateNotifier<AsyncValue<NotificationItem>> {
   final Ref ref;
