@@ -114,6 +114,9 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      // Body tidak resize saat keyboard muncul, jadi footer di bawah
+      // tetap diam di posisinya dan tidak ikut terdorong naik.
+      resizeToAvoidBottomInset: false,
       body: Stack(
         children: [
           Container(
@@ -453,7 +456,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                       ),
                       const SizedBox(height: 4),
                       Text(
-                        '©2023 Corim Apex. All rights reserved',
+                        '©2026 Corim Group Indonesia. All rights reserved',
                         style: TextStyle(
                           color: Colors.white.withOpacity(0.55),
                           fontSize: 11,

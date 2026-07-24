@@ -1,6 +1,7 @@
 import 'package:corim/admin/home/greeting_provider.dart';
 import 'package:corim/auth/auth_provider.dart';
 import 'package:corim/crm/client_list/client_screen.dart';
+import 'package:corim/crm/menu_screen.dart';
 import 'package:corim/main_button_nav.dart';
 import 'package:corim/notifications/notifcation_screen.dart';
 import 'package:corim/notifications/notification_detail_screen.dart';
@@ -84,6 +85,23 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
         n.projectName.toLowerCase().contains(q) ||
         n.clientName.toLowerCase().contains(q) ||
         n.requestedBy.toLowerCase().contains(q);
+  }
+
+  void _showComingSoon(String feature) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        title: const Text('Coming Soon'),
+        content: Text('This feature $feature is comming soon.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('OK'),
+          ),
+        ],
+      ),
+    );
   }
 
   @override
@@ -236,7 +254,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
         'onTap': () {
           Navigator.push(
             context,
-            MaterialPageRoute(builder: (_) => const ClientListScreen()),
+            MaterialPageRoute(builder: (_) => const CrmMenuScreen()),
           );
         },
       },
@@ -245,7 +263,11 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
         'label': 'FINANCE',
         'onTap': () {},
       },
-      {'asset': 'assets/images/home/hr.png', 'label': 'HR', 'onTap': () {}},
+      {
+        'asset': 'assets/images/home/hr.png',
+        'label': 'HR',
+        'onTap': () => _showComingSoon('HR'),
+      },
     ];
 
     return Container(
