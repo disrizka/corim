@@ -373,18 +373,23 @@ class _NotificationDetailScreenState
       child: Row(
         children: [
           Expanded(
-            child: Text(
-              info.label,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: const TextStyle(
-                fontSize: 13.5,
-                color: Color(0xFF075985),
-                fontWeight: FontWeight.w600,
-                decoration: TextDecoration.underline,
+            child: GestureDetector(
+              onTap: () => _openFile(file),
+              behavior: HitTestBehavior.opaque,
+              child: Text(
+                info.label,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(
+                  fontSize: 13.5,
+                  color: Color(0xFF075985),
+                  fontWeight: FontWeight.w600,
+                  decoration: TextDecoration.underline,
+                ),
               ),
             ),
           ),
+          const SizedBox(width: 8),
           TextButton.icon(
             onPressed: () => _openFile(file),
             style: TextButton.styleFrom(
