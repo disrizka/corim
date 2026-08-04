@@ -1,6 +1,8 @@
-import 'package:corim/notifications/expense_request_detail_screen.dart';
-import 'package:corim/notifications/notification_model.dart';
-import 'package:corim/notifications/notification_provider.dart';
+import 'dart:async';
+
+import 'package:corim/finance/expense_request_detail_screen.dart';
+import 'package:corim/finance/expense_request_model.dart';
+import 'package:corim/finance/expense_request_provider.dart';
 import 'package:corim/notifications/notification_style.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -16,34 +18,28 @@ class ExpenseRequestListScreen extends ConsumerStatefulWidget {
 class _ExpenseRequestListScreenState
     extends ConsumerState<ExpenseRequestListScreen> {
   final _searchController = TextEditingController();
-
-  @override
-  void initState() {
-    super.initState();
-    _searchController.addListener(_onSearchChanged);
-  }
-
-  void _onSearchChanged() => setState(() {});
+  Timer? _debounce;
 
   @override
   void dispose() {
-    _searchController.removeListener(_onSearchChanged);
+    _debounce?.cancel();
     _searchController.dispose();
     super.dispose();
   }
 
-  bool _matchesSearch(NotificationItem n, String query) {
-    if (query.isEmpty) return true;
-    final q = query.toLowerCase();
-    return n.clientName.toLowerCase().contains(q) ||
-        n.projectName.toLowerCase().contains(q) ||
-        n.approvalStatus.toLowerCase().contains(q) ||
-        n.title.toLowerCase().contains(q);
+  void _onSearchChanged(String value) {
+    _debounce?.cancel();
+    _debounce = Timer(const Duration(milliseconds: 400), () {
+      final notifier = ref.read(expenseRequestListProvider.notifier);
+      final current = ref.read(expenseRequestListProvider).filter;
+      notifier.applyFilter(current.copyWith(search: value.trim()));
+    });
+    setState(() {});
   }
 
   @override
   Widget build(BuildContext context) {
-    final expensesAsync = ref.watch(expenseRequestListProvider);
+    final state = ref.watch(expenseRequestListProvider);
 
     return Scaffold(
       backgroundColor: NotifColors.background,
@@ -55,7 +51,7 @@ class _ExpenseRequestListScreenState
               child: RefreshIndicator(
                 color: NotifColors.gradientEnd,
                 onRefresh: () =>
-                    ref.read(notificationListProvider.notifier).fetch(),
+                    ref.read(expenseRequestListProvider.notifier).refresh(),
                 child: SingleChildScrollView(
                   physics: const AlwaysScrollableScrollPhysics(),
                   padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
@@ -64,43 +60,13 @@ class _ExpenseRequestListScreenState
                     children: [
                       _buildSearchBar(),
                       const SizedBox(height: 16),
-                      expensesAsync.when(
-                        data: (items) {
-                          final query = _searchController.text.trim();
-                          final filtered =
-                              items
-                                  .where((n) => _matchesSearch(n, query))
-                                  .toList()
-                                ..sort((a, b) {
-                                  int rank(NotificationItem n) =>
-                                      n.isPending ? 0 : 1;
-                                  return rank(a).compareTo(rank(b));
-                                });
-
-                          if (items.isEmpty) return _buildEmptyState();
-                          if (filtered.isEmpty) {
-                            return _buildEmptyFilterState(query);
-                          }
-
-                          return Column(
-                            children: [
-                              for (final n in filtered) ...[
-                                _ExpenseRequestCard(item: n),
-                                const SizedBox(height: 12),
-                              ],
-                            ],
-                          );
-                        },
-                        loading: () => const Padding(
-                          padding: EdgeInsets.symmetric(vertical: 48),
-                          child: Center(
-                            child: CircularProgressIndicator(
-                              color: NotifColors.gradientEnd,
-                            ),
-                          ),
-                        ),
-                        error: (err, st) => _buildErrorState(err),
-                      ),
+                      _buildContent(state),
+                      if (!state.isLoading &&
+                          state.error == null &&
+                          state.items.isNotEmpty) ...[
+                        const SizedBox(height: 16),
+                        _buildPager(state),
+                      ],
                     ],
                   ),
                 ),
@@ -109,6 +75,34 @@ class _ExpenseRequestListScreenState
           ],
         ),
       ),
+    );
+  }
+
+  Widget _buildContent(ExpenseRequestListState state) {
+    if (state.isLoading) {
+      return const Padding(
+        padding: EdgeInsets.symmetric(vertical: 48),
+        child: Center(
+          child: CircularProgressIndicator(color: NotifColors.gradientEnd),
+        ),
+      );
+    }
+
+    if (state.error != null) {
+      return _buildErrorState(state.error!);
+    }
+
+    if (state.items.isEmpty) {
+      return _buildEmptyState(state.filter.search);
+    }
+
+    return Column(
+      children: [
+        for (final item in state.items) ...[
+          _ExpenseRequestCard(item: item),
+          const SizedBox(height: 12),
+        ],
+      ],
     );
   }
 
@@ -166,9 +160,10 @@ class _ExpenseRequestListScreenState
           Expanded(
             child: TextField(
               controller: _searchController,
+              onChanged: _onSearchChanged,
               style: const TextStyle(fontSize: 13),
               decoration: const InputDecoration(
-                hintText: 'Search client name, project name, status...',
+                hintText: 'Search request number, notes, status...',
                 hintStyle: TextStyle(color: Colors.grey, fontSize: 13),
                 border: InputBorder.none,
                 isDense: true,
@@ -178,7 +173,10 @@ class _ExpenseRequestListScreenState
           if (_searchController.text.isNotEmpty)
             IconButton(
               icon: const Icon(Icons.close, color: Colors.grey, size: 18),
-              onPressed: () => _searchController.clear(),
+              onPressed: () {
+                _searchController.clear();
+                _onSearchChanged('');
+              },
               splashRadius: 16,
             )
           else
@@ -191,7 +189,60 @@ class _ExpenseRequestListScreenState
     );
   }
 
-  Widget _buildEmptyState() {
+  Widget _buildPager(ExpenseRequestListState state) {
+    final meta = state.meta;
+    return Container(
+      padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 4),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: NotifColors.cardBorder),
+      ),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          IconButton(
+            iconSize: 20,
+            visualDensity: VisualDensity.compact,
+            onPressed: state.hasPrevPage
+                ? () => ref.read(expenseRequestListProvider.notifier).prevPage()
+                : null,
+            icon: const Icon(Icons.chevron_left_rounded),
+          ),
+          Expanded(
+            child: Column(
+              children: [
+                Text(
+                  'Page ${meta.currentPage} of ${meta.totalPages}',
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(
+                    fontSize: 12.5,
+                    fontWeight: FontWeight.w600,
+                    color: Color(0xFF555555),
+                  ),
+                ),
+                Text(
+                  '${meta.totalRows} total requests',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(fontSize: 11, color: Colors.grey.shade500),
+                ),
+              ],
+            ),
+          ),
+          IconButton(
+            iconSize: 20,
+            visualDensity: VisualDensity.compact,
+            onPressed: state.hasNextPage
+                ? () => ref.read(expenseRequestListProvider.notifier).nextPage()
+                : null,
+            icon: const Icon(Icons.chevron_right_rounded),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildEmptyState(String query) {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 48),
       child: Center(
@@ -212,9 +263,12 @@ class _ExpenseRequestListScreenState
               ),
             ),
             const SizedBox(height: 16),
-            const Text(
-              'No expense requests yet',
-              style: TextStyle(
+            Text(
+              query.isEmpty
+                  ? 'No expense requests yet'
+                  : 'No expense requests match "$query"',
+              textAlign: TextAlign.center,
+              style: const TextStyle(
                 fontSize: 15,
                 fontWeight: FontWeight.w600,
                 color: NotifColors.textPrimary,
@@ -227,21 +281,6 @@ class _ExpenseRequestListScreenState
               style: TextStyle(fontSize: 13, color: Colors.grey.shade500),
             ),
           ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildEmptyFilterState(String query) {
-    final message = query.isEmpty
-        ? 'No expense requests found'
-        : 'No expense requests match "$query"';
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 48),
-      child: Center(
-        child: Text(
-          message,
-          style: TextStyle(fontSize: 13, color: Colors.grey.shade500),
         ),
       ),
     );
@@ -273,7 +312,7 @@ class _ExpenseRequestListScreenState
             const SizedBox(height: 12),
             TextButton(
               onPressed: () =>
-                  ref.read(notificationListProvider.notifier).fetch(),
+                  ref.read(expenseRequestListProvider.notifier).refresh(),
               child: const Text('Retry'),
             ),
           ],
@@ -284,26 +323,15 @@ class _ExpenseRequestListScreenState
 }
 
 class _ExpenseRequestCard extends StatelessWidget {
-  final NotificationItem item;
+  final ExpenseRequestItem item;
 
   const _ExpenseRequestCard({required this.item});
-
-  String get _timeAgo {
-    final created = DateTime.tryParse(item.createdAt);
-    if (created == null) return item.activityTime;
-    final diff = DateTime.now().difference(created);
-    if (diff.inMinutes < 1) return 'Just now';
-    if (diff.inHours < 1) return '${diff.inMinutes}m';
-    if (diff.inHours < 24) return '${diff.inHours}h';
-    if (diff.inDays < 7) return '${diff.inDays}d';
-    return item.activityDateId;
-  }
 
   void _openDetail(BuildContext context) {
     Navigator.push(
       context,
       MaterialPageRoute(
-        builder: (_) => ExpenseRequestDetailScreen(notificationId: item.id),
+        builder: (_) => ExpenseRequestDetailScreen(expenseId: item.id),
       ),
     );
   }
@@ -344,40 +372,38 @@ class _ExpenseRequestCard extends StatelessWidget {
                     ),
                     const SizedBox(width: 12),
                     Expanded(
-                      child: Text(
-                        item.title,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
-                          fontSize: 15,
-                          fontWeight: FontWeight.w700,
-                          color: NotifColors.textPrimary,
-                        ),
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    Row(
-                      children: [
-                        Icon(
-                          Icons.access_time_rounded,
-                          size: 12,
-                          color: Colors.grey.shade500,
-                        ),
-                        const SizedBox(width: 3),
-                        Text(
-                          _timeAgo,
-                          style: TextStyle(
-                            fontSize: 11.5,
-                            color: Colors.grey.shade500,
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            children: [
+                              _FormTypeBadge(formType: item.formType),
+                              const SizedBox(width: 6),
+                              NotifStatusBadge(
+                                status: item.status,
+                                dense: true,
+                              ),
+                            ],
                           ),
-                        ),
-                      ],
+                          const SizedBox(height: 6),
+                          Text(
+                            item.requestNumber,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                              fontSize: 14,
+                              fontWeight: FontWeight.w700,
+                              color: NotifColors.textPrimary,
+                            ),
+                          ),
+                        ],
+                      ),
                     ),
                   ],
                 ),
                 const SizedBox(height: 10),
                 Text(
-                  item.desc,
+                  item.notes,
                   maxLines: 2,
                   overflow: TextOverflow.ellipsis,
                   style: const TextStyle(
@@ -395,26 +421,26 @@ class _ExpenseRequestCard extends StatelessWidget {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           const Text(
-                            'Project Name',
+                            'Amount',
                             style: TextStyle(fontSize: 11, color: Colors.grey),
                           ),
                           const SizedBox(height: 4),
                           Row(
                             children: [
                               const Icon(
-                                Icons.folder_outlined,
+                                Icons.payments_outlined,
                                 size: 14,
                                 color: Color(0xFF555555),
                               ),
                               const SizedBox(width: 4),
                               Expanded(
                                 child: Text(
-                                  item.projectName,
+                                  item.formattedAmount,
                                   maxLines: 1,
                                   overflow: TextOverflow.ellipsis,
                                   style: const TextStyle(
                                     fontSize: 12,
-                                    fontWeight: FontWeight.w500,
+                                    fontWeight: FontWeight.w700,
                                     color: Color(0xFF222222),
                                   ),
                                 ),
@@ -429,21 +455,21 @@ class _ExpenseRequestCard extends StatelessWidget {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           const Text(
-                            'Due Date',
+                            'Requested By',
                             style: TextStyle(fontSize: 11, color: Colors.grey),
                           ),
                           const SizedBox(height: 4),
                           Row(
                             children: [
                               const Icon(
-                                Icons.calendar_today_outlined,
+                                Icons.person_outline_rounded,
                                 size: 14,
                                 color: Color(0xFF555555),
                               ),
                               const SizedBox(width: 4),
                               Expanded(
                                 child: Text(
-                                  '${item.activityDateId}, ${item.activityTime}',
+                                  item.createdBy,
                                   maxLines: 1,
                                   overflow: TextOverflow.ellipsis,
                                   style: const TextStyle(
@@ -456,6 +482,24 @@ class _ExpenseRequestCard extends StatelessWidget {
                             ],
                           ),
                         ],
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 4),
+                Row(
+                  children: [
+                    Icon(
+                      Icons.access_time_rounded,
+                      size: 12,
+                      color: Colors.grey.shade500,
+                    ),
+                    const SizedBox(width: 3),
+                    Text(
+                      '${item.createdDatePart} ${item.createdTimePart}'.trim(),
+                      style: TextStyle(
+                        fontSize: 11.5,
+                        color: Colors.grey.shade500,
                       ),
                     ),
                   ],
@@ -493,6 +537,32 @@ class _ExpenseRequestCard extends StatelessWidget {
               ],
             ),
           ),
+        ),
+      ),
+    );
+  }
+}
+
+class _FormTypeBadge extends StatelessWidget {
+  final String formType;
+
+  const _FormTypeBadge({required this.formType});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
+      decoration: BoxDecoration(
+        color: const Color(0xFFEAF2FF),
+        borderRadius: BorderRadius.circular(20),
+      ),
+      child: Text(
+        expenseFormTypeLabel(formType),
+        style: const TextStyle(
+          fontSize: 10,
+          fontWeight: FontWeight.w800,
+          letterSpacing: 0.3,
+          color: Color(0xFF2563EB),
         ),
       ),
     );

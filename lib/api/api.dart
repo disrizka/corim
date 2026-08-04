@@ -21,6 +21,10 @@ class Endpoints {
   static const String notifications = "notifications";
   static String notificationDetail(String id) => "notifications/$id";
   static String notificationAction(String id) => "notifications/$id/action";
+
+  static const String expensesEmployee = "finance/expenses-employee";
+  static String expensesEmployeeDetail(String id) =>
+      "finance/expenses-employee/$id";
 }
 
 class StorageKeys {

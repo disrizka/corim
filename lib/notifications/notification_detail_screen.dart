@@ -2,6 +2,7 @@ import 'dart:io';
 import 'dart:typed_data';
 import 'package:corim/admin/project/project_detail_screen.dart';
 import 'package:corim/api/api.dart';
+import 'package:corim/finance/expense_request_detail_screen.dart';
 import 'package:corim/notifications/notification_model.dart';
 import 'package:corim/notifications/notification_provider.dart';
 import 'package:corim/notifications/notification_style.dart';
@@ -201,6 +202,15 @@ class _NotificationDetailScreenState
     );
   }
 
+  void _openExpenseDetail(NotificationItem n) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => ExpenseRequestDetailScreen(expenseId: n.id),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final detailAsync = ref.watch(
@@ -327,6 +337,13 @@ class _NotificationDetailScreenState
             label: 'View Project Detail',
             onPressed: () => _openProject(n),
           ),
+          if (n.isExpenseRequest) ...[
+            const SizedBox(height: 10),
+            RequestOutlinedActionButton(
+              label: 'Detail Expense',
+              onPressed: () => _openExpenseDetail(n),
+            ),
+          ],
 
           const SizedBox(height: 20),
           if (n.isPending) ...[
