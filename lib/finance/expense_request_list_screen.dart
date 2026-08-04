@@ -62,15 +62,6 @@ class _ExpenseRequestListScreenState
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      const Text(
-                        'Request Data',
-                        style: TextStyle(
-                          fontSize: 17,
-                          fontWeight: FontWeight.w700,
-                          color: NotifColors.textPrimary,
-                        ),
-                      ),
-                      const SizedBox(height: 12),
                       _buildSearchBar(),
                       const SizedBox(height: 16),
                       expensesAsync.when(

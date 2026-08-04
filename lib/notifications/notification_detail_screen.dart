@@ -1,6 +1,5 @@
 import 'dart:io';
 import 'dart:typed_data';
-
 import 'package:corim/admin/project/project_detail_screen.dart';
 import 'package:corim/api/api.dart';
 import 'package:corim/notifications/notification_model.dart';

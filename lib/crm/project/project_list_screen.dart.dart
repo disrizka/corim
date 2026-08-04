@@ -424,8 +424,8 @@ class _ProjectListScreenState extends ConsumerState<ProjectListScreen> {
   }
 
   Widget _buildStatusBadge(String status) {
-    final label = status.trim().isEmpty ? '-' : status.toUpperCase();
-    final color = _statusColor(status);
+    final label = _normalizeStatusLabel(status);
+    final color = _statusColor(label);
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
       decoration: BoxDecoration(
@@ -443,20 +443,40 @@ class _ProjectListScreenState extends ConsumerState<ProjectListScreen> {
     );
   }
 
-  Color _statusColor(String status) {
-    switch (status.toLowerCase()) {
+  String _normalizeStatusLabel(String status) {
+    switch (status.trim().toLowerCase()) {
       case 'won':
-        return const Color(0xFF16A34A);
+        return 'WON';
       case 'lost':
-        return const Color(0xFFDC2626);
+        return 'LOST';
+      case 'done':
+      case 'completed':
+      case 'complete':
+      case 'finished':
+        return 'DONE';
+      case 'pending':
       case 'ongoing':
       case 'on going':
       case 'in progress':
-        return const Color(0xFF2563EB);
-      case 'pending':
-        return const Color(0xFFF59E0B);
+        return 'PENDING';
       default:
-        return const Color(0xFF1B1C52);
+        return '-';
+    }
+  }
+
+  Color _statusColor(String label) {
+    switch (label) {
+      case 'WON':
+        return const Color(0xFF16A34A);
+      case 'LOST':
+        return const Color(0xFFDC2626);
+      case 'DONE':
+        return const Color(0xFF2563EB);
+      case 'PENDING':
+        return const Color(0xFFF59E0B);
+      case '-':
+      default:
+        return const Color(0xFF9CA3AF);
     }
   }
 }

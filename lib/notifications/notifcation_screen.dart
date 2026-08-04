@@ -1,6 +1,7 @@
 import 'package:corim/admin/project/project_detail_screen.dart';
 import 'package:corim/notifications/notification_detail_screen.dart';
 import 'package:corim/notifications/notification_model.dart';
+import 'package:corim/notifications/notification_pageview.dart';
 import 'package:corim/notifications/notification_provider.dart';
 import 'package:corim/notifications/notification_style.dart';
 import 'package:flutter/material.dart';
@@ -45,52 +46,29 @@ class NotificationScreen extends ConsumerStatefulWidget {
 
 class _NotificationScreenState extends ConsumerState<NotificationScreen> {
   _NotifFilter _filter = _NotifFilter.all;
+  int _currentPage = 1;
 
   @override
   Widget build(BuildContext context) {
-    final notificationsAsync = ref.watch(notificationListProvider);
+    final state = ref.watch(notificationListProvider);
+    final currentPageItems = state.pageItems(_currentPage);
 
     return Scaffold(
       backgroundColor: NotifColors.background,
       body: Column(
         children: [
-          _buildHeader(context, notificationsAsync),
-          notificationsAsync.maybeWhen(
-            data: (items) => items.isEmpty
-                ? const SizedBox.shrink()
-                : _buildFilterBar(items),
-            orElse: () => const SizedBox.shrink(),
-          ),
+          _buildHeader(context),
+          if (currentPageItems.isNotEmpty) _buildFilterBar(currentPageItems),
           Expanded(
-            child: notificationsAsync.when(
-              data: (items) {
-                final filtered = items.where(_filter.matches).toList()
-                  ..sort((a, b) {
-                    int rank(NotificationItem n) => n.isPending ? 0 : 1;
-                    return rank(a).compareTo(rank(b));
-                  });
-                if (items.isEmpty) return _buildEmptyState();
-                if (filtered.isEmpty) return _buildEmptyFilterState();
-
-                return RefreshIndicator(
-                  color: NotifColors.gradientEnd,
-                  onRefresh: () =>
-                      ref.read(notificationListProvider.notifier).fetch(),
-                  child: ListView.separated(
-                    padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
-                    itemCount: filtered.length,
-                    separatorBuilder: (_, __) => const SizedBox(height: 12),
-                    itemBuilder: (context, index) =>
-                        _NotificationCard(item: filtered[index]),
-                  ),
-                );
-              },
-              loading: () => const Center(
-                child: CircularProgressIndicator(
-                  color: NotifColors.gradientEnd,
-                ),
-              ),
-              error: (err, st) => _buildErrorState(err),
+            child: NotificationPageView(
+              cardBuilder: (context, item) => _NotificationCard(item: item),
+              filter: _filter.matches,
+              sortRank: (n) => n.isPending ? 0 : 1,
+              onPageChanged: (page) => setState(() => _currentPage = page),
+              emptyBuilder: (context) => _buildEmptyState(),
+              emptyFilterBuilder: (context, hasSearch) =>
+                  _buildEmptyFilterState(),
+              errorBuilder: (context, err) => _buildErrorState(err),
             ),
           ),
         ],
@@ -98,14 +76,8 @@ class _NotificationScreenState extends ConsumerState<NotificationScreen> {
     );
   }
 
-  Widget _buildHeader(
-    BuildContext context,
-    AsyncValue<List<NotificationItem>> notificationsAsync,
-  ) {
-    final pendingCount = notificationsAsync.maybeWhen(
-      data: (items) => items.where((n) => n.isPending).length,
-      orElse: () => 0,
-    );
+  Widget _buildHeader(BuildContext context) {
+    final pendingCount = ref.watch(pendingNotificationCountProvider);
 
     return Container(
       decoration: const BoxDecoration(gradient: NotifColors.brandGradient),
@@ -162,41 +134,54 @@ class _NotificationScreenState extends ConsumerState<NotificationScreen> {
   Widget _buildFilterBar(List<NotificationItem> items) {
     return Container(
       color: Colors.white,
-      padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
-      child: SingleChildScrollView(
-        scrollDirection: Axis.horizontal,
-        child: Row(
-          children: _NotifFilter.values.map((f) {
-            final count = items.where(f.matches).length;
-            final isActive = f == _filter;
-            return Padding(
-              padding: const EdgeInsets.only(right: 8),
-              child: ChoiceChip(
-                label: Text('${f.label}${count > 0 ? ' ($count)' : ''}'),
-                selected: isActive,
-                onSelected: (_) => setState(() => _filter = f),
-                labelStyle: TextStyle(
-                  fontSize: 12.5,
-                  fontWeight: FontWeight.w600,
-                  color: isActive ? Colors.white : NotifColors.textMuted,
-                ),
-                selectedColor: NotifColors.gradientEnd,
-                backgroundColor: NotifColors.background,
-                showCheckmark: false,
-                side: BorderSide(
-                  color: isActive ? Colors.transparent : NotifColors.divider,
-                ),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(20),
-                ),
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 12,
-                  vertical: 4,
-                ),
+      padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Padding(
+            padding: const EdgeInsets.only(bottom: 8),
+            child: Text(
+              'Filters apply to page $_currentPage',
+              style: TextStyle(fontSize: 11, color: Colors.grey.shade400),
+            ),
+          ),
+          _buildFilterChipsRow(items),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildFilterChipsRow(List<NotificationItem> items) {
+    return SingleChildScrollView(
+      scrollDirection: Axis.horizontal,
+      child: Row(
+        children: _NotifFilter.values.map((f) {
+          final count = items.where(f.matches).length;
+          final isActive = f == _filter;
+          return Padding(
+            padding: const EdgeInsets.only(right: 8),
+            child: ChoiceChip(
+              label: Text('${f.label}${count > 0 ? ' ($count)' : ''}'),
+              selected: isActive,
+              onSelected: (_) => setState(() => _filter = f),
+              labelStyle: TextStyle(
+                fontSize: 12.5,
+                fontWeight: FontWeight.w600,
+                color: isActive ? Colors.white : NotifColors.textMuted,
               ),
-            );
-          }).toList(),
-        ),
+              selectedColor: NotifColors.gradientEnd,
+              backgroundColor: NotifColors.background,
+              showCheckmark: false,
+              side: BorderSide(
+                color: isActive ? Colors.transparent : NotifColors.divider,
+              ),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(20),
+              ),
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+            ),
+          );
+        }).toList(),
       ),
     );
   }

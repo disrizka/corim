@@ -13,6 +13,10 @@ class Endpoints {
   static String clientDetail(String id) => "clients/$id";
   static const String projects = "projects";
   static String projectDetail(String id) => "projects/$id";
+  static String projectSalesStatusQuotations(String id) =>
+      "projects/$id/sales-status-quotations";
+  static String projectDeliveryStatus(String id) =>
+      "projects/$id/delivery-status";
 
   static const String notifications = "notifications";
   static String notificationDetail(String id) => "notifications/$id";

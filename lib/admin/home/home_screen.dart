@@ -6,6 +6,7 @@ import 'package:corim/main_button_nav.dart';
 import 'package:corim/notifications/notifcation_screen.dart';
 import 'package:corim/notifications/notification_detail_screen.dart';
 import 'package:corim/notifications/notification_model.dart';
+import 'package:corim/notifications/notification_pageview.dart';
 import 'package:corim/notifications/notification_provider.dart';
 import 'package:corim/notifications/notification_style.dart';
 import 'package:flutter/material.dart';
@@ -61,6 +62,8 @@ class HomeScreen extends ConsumerStatefulWidget {
 class _HomeScreenState extends ConsumerState<HomeScreen> {
   _HomeFilter _filter = _HomeFilter.all;
   final _searchController = TextEditingController();
+  int _requestListPage = 1;
+  static const double _bottomNavReservedHeight = 16 + 56 + 16;
 
   @override
   void initState() {
@@ -113,21 +116,9 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
           Column(
             children: [
               _buildHeader(context, ref),
-              Expanded(
-                child: RefreshIndicator(
-                  color: NotifColors.gradientEnd,
-                  onRefresh: () =>
-                      ref.read(notificationListProvider.notifier).fetch(),
-                  child: SingleChildScrollView(
-                    physics: const AlwaysScrollableScrollPhysics(),
-                    padding: const EdgeInsets.only(bottom: 100),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [_buildMenuRow(context), _buildRequestList()],
-                    ),
-                  ),
-                ),
-              ),
+              _buildMenuRow(context),
+              _buildRequestListHeader(),
+              Expanded(child: _buildRequestListBody()),
             ],
           ),
 
@@ -312,11 +303,9 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     );
   }
 
-  Widget _buildRequestList() {
-    final requestsAsync = ref.watch(notificationListProvider);
-
+  Widget _buildRequestListHeader() {
     return Padding(
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.fromLTRB(16, 16, 16, 12),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -329,51 +318,33 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
             ),
           ),
           const SizedBox(height: 12),
-
           _buildFilterChips(),
           const SizedBox(height: 12),
-
           _buildSearchBar(),
-          const SizedBox(height: 16),
-
-          requestsAsync.when(
-            data: (items) {
-              final query = _searchController.text.trim();
-              final filtered =
-                  items
-                      .where(_filter.matches)
-                      .where((n) => _matchesSearch(n, query))
-                      .toList()
-                    ..sort((a, b) {
-                      int rank(NotificationItem n) => n.isPending ? 0 : 1;
-                      return rank(a).compareTo(rank(b));
-                    });
-
-              if (items.isEmpty) return _buildEmptyState();
-              if (filtered.isEmpty) {
-                return _buildEmptyFilterState();
-              }
-
-              return Column(
-                children: [
-                  for (final n in filtered) ...[
-                    _buildRequestCard(n),
-                    const SizedBox(height: 12),
-                  ],
-                ],
-              );
-            },
-            loading: () => const Padding(
-              padding: EdgeInsets.symmetric(vertical: 32),
-              child: Center(
-                child: CircularProgressIndicator(
-                  color: NotifColors.gradientEnd,
-                ),
-              ),
-            ),
-            error: (err, st) => _buildErrorState(err),
-          ),
         ],
+      ),
+    );
+  }
+
+  Widget _buildRequestListBody() {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16),
+      child: Padding(
+        padding: const EdgeInsets.only(bottom: _bottomNavReservedHeight),
+        child: NotificationPageView(
+          cardBuilder: (context, item) => Padding(
+            padding: const EdgeInsets.only(bottom: 12),
+            child: _buildRequestCard(item),
+          ),
+          filter: _filter.matches,
+          searchQuery: _searchController.text,
+          searchMatcher: _matchesSearch,
+          sortRank: (n) => n.isPending ? 0 : 1,
+          onPageChanged: (page) => setState(() => _requestListPage = page),
+          emptyBuilder: (context) => _buildEmptyState(),
+          emptyFilterBuilder: (context, hasSearch) => _buildEmptyFilterState(),
+          errorBuilder: (context, err) => _buildErrorState(err),
+        ),
       ),
     );
   }
@@ -497,8 +468,8 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   Widget _buildEmptyFilterState() {
     final query = _searchController.text.trim();
     final message = query.isEmpty
-        ? 'No requests for "${_filter.label}"'
-        : 'No requests match "$query"';
+        ? 'No requests for "${_filter.label}" on page $_requestListPage'
+        : 'No requests match "$query" on page $_requestListPage';
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 32),
       child: Center(

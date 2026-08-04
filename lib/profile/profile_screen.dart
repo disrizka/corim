@@ -1,6 +1,7 @@
 import 'package:corim/auth/auth_provider.dart';
 import 'package:corim/auth/login_screen.dart';
 import 'package:corim/notifications/notifcation_screen.dart';
+import 'package:corim/profile/change_password_screen.dart';
 import 'package:corim/profile/profile_model.dart';
 import 'package:corim/profile/profile_provider.dart';
 import 'package:flutter/material.dart';
@@ -8,8 +9,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 class ProfileScreen extends ConsumerWidget {
   const ProfileScreen({super.key});
-
-  static const Color _navy = Color(0xFF1A1D52);
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -42,19 +41,16 @@ class ProfileScreen extends ConsumerWidget {
                     ),
                     const SizedBox(height: 12),
                     _menuItem(
-                      icon: Icons.person_outline,
-                      label: 'Account',
-                      onTap: () => _comingSoon(context, 'Account'),
-                    ),
-                    _menuItem(
-                      icon: Icons.settings_outlined,
-                      label: 'Setting',
-                      onTap: () => _comingSoon(context, 'Setting'),
-                    ),
-                    _menuItem(
-                      icon: Icons.info_outline,
-                      label: 'Support',
-                      onTap: () => _comingSoon(context, 'Support'),
+                      icon: Icons.lock_reset_outlined,
+                      label: 'Change Password',
+                      onTap: () {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (_) => const ChangePasswordScreen(),
+                          ),
+                        );
+                      },
                     ),
                     _menuItem(
                       icon: Icons.verified_user_outlined,
@@ -108,7 +104,7 @@ class ProfileScreen extends ConsumerWidget {
   ) {
     return Container(
       width: double.infinity,
-      padding: const EdgeInsets.fromLTRB(20, 8, 20, 32),
+      padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
       decoration: const BoxDecoration(
         gradient: LinearGradient(
           begin: Alignment.topLeft,
@@ -138,48 +134,7 @@ class ProfileScreen extends ConsumerWidget {
               ),
             ],
           ),
-          const SizedBox(height: 4),
-          Stack(
-            clipBehavior: Clip.none,
-            children: [
-              Container(
-                width: 88,
-                height: 88,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  border: Border.all(color: Colors.white, width: 2),
-                ),
-                child: ClipOval(
-                  child: Image.asset(
-                    'assets/images/logo.png',
-                    fit: BoxFit.cover,
-                    errorBuilder: (_, __, ___) => Container(
-                      color: Colors.white24,
-                      child: const Icon(
-                        Icons.person,
-                        color: Colors.white,
-                        size: 40,
-                      ),
-                    ),
-                  ),
-                ),
-              ),
-              Positioned(
-                bottom: 0,
-                right: 0,
-                child: Container(
-                  width: 26,
-                  height: 26,
-                  decoration: const BoxDecoration(
-                    color: Colors.white,
-                    shape: BoxShape.circle,
-                  ),
-                  child: const Icon(Icons.camera_alt, size: 14, color: _navy),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 12),
+          const SizedBox(height: 8),
           profileAsync.when(
             data: (profile) => Column(
               children: [
