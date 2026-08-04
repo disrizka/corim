@@ -7,6 +7,9 @@ import 'package:http/http.dart' as http;
 class ApiService {
   final Ref _ref;
 
+  static const String _basicAuthKey =
+      'Basic bWFudWFsX2FwcDpkZGY0YjY1OTE2NTc2N2E2Mjc4NGY5NGM0ZWU1NmQwNzVkYjEwYzk0NTBkYTVjZjgxYjZhZjdiOWY1NmYxZWY3';
+
   ApiService(this._ref);
 
   Future<http.Response?> get(String endpoint) async {
@@ -18,7 +21,8 @@ class ApiService {
     var response = await http.get(
       url,
       headers: {
-        'Authorization': 'Bearer $token',
+        'Authorization': _basicAuthKey, // ✅ Basic auth key
+        'Access-Token': 'Bearer $token', // ✅ token user di header terpisah
         'Content-Type': ApiConfig.contentTypeJson,
       },
     );
@@ -37,7 +41,8 @@ class ApiService {
         response = await http.get(
           url,
           headers: {
-            'Authorization': 'Bearer $newToken',
+            'Authorization': _basicAuthKey,
+            'Access-Token': 'Bearer $newToken',
             'Content-Type': ApiConfig.contentTypeJson,
           },
         );
@@ -60,7 +65,8 @@ class ApiService {
     var response = await http.post(
       url,
       headers: {
-        'Authorization': 'Bearer $token',
+        'Authorization': _basicAuthKey, // ✅ Basic auth key
+        'Access-Token': 'Bearer $token', // ✅ token user di header terpisah
         'Content-Type': ApiConfig.contentTypeJson,
       },
       body: jsonEncode(body),
@@ -80,7 +86,8 @@ class ApiService {
         response = await http.post(
           url,
           headers: {
-            'Authorization': 'Bearer $newToken',
+            'Authorization': _basicAuthKey,
+            'Access-Token': 'Bearer $newToken',
             'Content-Type': ApiConfig.contentTypeJson,
           },
           body: jsonEncode(body),

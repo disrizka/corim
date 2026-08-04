@@ -8,6 +8,7 @@ class ApiConfig {
 class Endpoints {
   static const String login = "auth/login";
   static const String refreshToken = "auth/refresh-token";
+  static const String changePassword = "change-password";
   static const String profile = "profile";
   static const String clients = "clients";
   static String clientDetail(String id) => "clients/$id";

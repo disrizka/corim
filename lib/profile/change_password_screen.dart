@@ -1,15 +1,18 @@
 import 'dart:convert';
+import 'package:corim/service/api_service.dart';
 import 'package:flutter/material.dart';
-import 'package:http/http.dart' as http;
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:corim/api/api.dart';
 
-class ChangePasswordScreen extends StatefulWidget {
+class ChangePasswordScreen extends ConsumerStatefulWidget {
   const ChangePasswordScreen({super.key});
 
   @override
-  State<ChangePasswordScreen> createState() => _ChangePasswordScreenState();
+  ConsumerState<ChangePasswordScreen> createState() =>
+      _ChangePasswordScreenState();
 }
 
-class _ChangePasswordScreenState extends State<ChangePasswordScreen> {
+class _ChangePasswordScreenState extends ConsumerState<ChangePasswordScreen> {
   final _formKey = GlobalKey<FormState>();
 
   final TextEditingController _currentPasswordController =
@@ -55,16 +58,23 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen> {
     setState(() => _isLoading = true);
 
     try {
-      final url = Uri.parse('https://corim-api.eon.id/change-password');
-      final response = await http.post(
-        url,
-        headers: {'Content-Type': 'application/json'},
-        body: jsonEncode({
-          'currentPassword': _currentPasswordController.text,
-          'newPassword': _newPasswordController.text,
-          'confirmPassword': _confirmPasswordController.text,
-        }),
-      );
+      final apiService = ref.read(apiServiceProvider);
+      final response = await apiService.post(Endpoints.changePassword, {
+        'currentPassword': _currentPasswordController.text,
+        'newPassword': _newPasswordController.text,
+        'confirmPassword': _confirmPasswordController.text,
+      });
+
+      if (response == null) {
+        if (mounted) {
+          _showCustomSnackBar(
+            context,
+            'Session expired. Please login again.',
+            isError: true,
+          );
+        }
+        return;
+      }
 
       final data = jsonDecode(response.body);
 
