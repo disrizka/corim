@@ -261,6 +261,7 @@ class ExpenseRequestDetailNotifier
       if (response.statusCode == 200) {
         final body = jsonDecode(response.body);
         final data = body['data'];
+        print('[EXPENSE DETAIL] raw project field: ${data?['project']}');
         state = AsyncValue.data(
           ExpenseRequestDetail.fromJson(Map<String, dynamic>.from(data ?? {})),
         );
@@ -276,6 +277,131 @@ class ExpenseRequestDetailNotifier
       state = AsyncValue.error(e, st);
     }
   }
+
+  /// Approve or reject this expense request while it's still PENDING.
+  /// Refetches the detail afterwards (on success) so the screen reflects
+  /// the new status/phase immediately.
+  ///
+  /// IMPORTANT: the backend can respond with HTTP 200 even when the action
+  /// actually failed for a business reason (e.g. "you are not assigned as
+  /// level 1 approver") — the real result lives inside the JSON body, not
+  /// the status code. So we must inspect the body instead of trusting
+  /// `statusCode == 200` alone, otherwise the app shows a fake "success"
+  /// while nothing actually changed.
+  Future<ExpenseActionResult> sendAction({
+    required bool approve,
+    String? note,
+  }) async {
+    try {
+      final token = ref.read(authProvider).accessToken ?? '';
+      final uri = Uri.parse(
+        '${ApiConfig.baseUrl}${Endpoints.expensesEmployeeAction(id)}',
+      );
+
+      Future<http.Response> post(String accessToken) => http.post(
+        uri,
+        headers: _headers(accessToken),
+        body: jsonEncode({
+          'action': approve ? 'approve' : 'reject',
+          'note': note ?? '',
+        }),
+      );
+
+      print('[EXPENSE ACTION] POST $uri (${approve ? 'approve' : 'reject'})');
+      var response = await post(token);
+      print('[EXPENSE ACTION] Status: ${response.statusCode}');
+      print('[EXPENSE ACTION] Body: ${response.body}');
+
+      if (response.statusCode == 401) {
+        final newToken = await ref
+            .read(authProvider.notifier)
+            .refreshFromInterceptor();
+        if (newToken == null) {
+          return const ExpenseActionResult(
+            success: false,
+            message: 'Sesi berakhir, silakan login kembali',
+          );
+        }
+        response = await post(newToken);
+        print('[EXPENSE ACTION] Retry status: ${response.statusCode}');
+        print('[EXPENSE ACTION] Retry body: ${response.body}');
+      }
+
+      Map<String, dynamic> body = const {};
+      try {
+        final decoded = jsonDecode(response.body);
+        if (decoded is Map) body = Map<String, dynamic>.from(decoded);
+      } catch (_) {
+        // Body bukan JSON valid, biarkan body kosong.
+      }
+
+      // Cari indikator sukses/gagal dari body. Backend ini ternyata selalu
+      // bisa saja membalas HTTP 200 di level transport, sementara kode
+      // status sesungguhnya ada di body sebagai angka (contoh nyata:
+      // {"status": 400, "msg": "Validation failed", "errors": {...}}).
+      // Jadi field 'status' numerik di body HARUS diperiksa juga, bukan
+      // cuma HTTP status code-nya.
+      final successField = body['success'];
+      final numericBodyStatus = body['status'] is num
+          ? (body['status'] as num).toInt()
+          : int.tryParse('${body['status']}');
+      final stringStatusField = body['status']?.toString().toLowerCase();
+      final hasErrorField =
+          (body['error'] != null && body['error'].toString().isNotEmpty) ||
+          (body['errors'] != null &&
+              !(body['errors'] is Map && (body['errors'] as Map).isEmpty));
+
+      final bodySaysFailed =
+          successField == false ||
+          stringStatusField == 'error' ||
+          stringStatusField == 'failed' ||
+          (numericBodyStatus != null && numericBodyStatus >= 400) ||
+          hasErrorField;
+
+      final isHttpOk = response.statusCode >= 200 && response.statusCode < 300;
+      final isSuccess = isHttpOk && !bodySaysFailed;
+
+      // Susun pesan: kalau ada detail per-field di 'errors', gabungkan
+      // supaya jelas field mana yang salah (mis. "action: must be one of
+      // approve or reject"), fallback ke message/msg/error top-level.
+      String? message;
+      final errorsField = body['errors'];
+      if (errorsField is Map && errorsField.isNotEmpty) {
+        message = errorsField.entries
+            .map((e) => '${e.key}: ${e.value}')
+            .join('\n');
+      } else if (errorsField is String && errorsField.trim().isNotEmpty) {
+        message = errorsField;
+      }
+      message ??= (body['message'] ?? body['msg'] ?? body['error'])?.toString();
+
+      if (isSuccess) {
+        await fetch();
+        return ExpenseActionResult(success: true, message: message);
+      }
+
+      return ExpenseActionResult(
+        success: false,
+        message: (message != null && message.trim().isNotEmpty)
+            ? message
+            : 'Failed to process request, please try again',
+      );
+    } catch (e, st) {
+      print('[EXPENSE ACTION] Exception: $e');
+      print('[EXPENSE ACTION] Stack: $st');
+      return const ExpenseActionResult(
+        success: false,
+        message: 'Failed to process request, please try again',
+      );
+    }
+  }
+}
+
+class ExpenseActionResult {
+  final bool success;
+  final String? message;
+
+  const ExpenseActionResult({required this.success, this.message});
 }
 
 final expenseRequestDetailProvider =

@@ -26,6 +26,8 @@ class Endpoints {
   static const String expensesEmployee = "finance/expenses-employee";
   static String expensesEmployeeDetail(String id) =>
       "finance/expenses-employee/$id";
+  static String expensesEmployeeAction(String id) =>
+      "finance/expenses-employee/$id/action";
 }
 
 class StorageKeys {

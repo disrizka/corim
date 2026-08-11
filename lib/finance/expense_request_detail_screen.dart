@@ -6,21 +6,30 @@ import 'package:corim/notifications/request_detail_widgets.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-class ExpenseRequestDetailScreen extends ConsumerWidget {
+class ExpenseRequestDetailScreen extends ConsumerStatefulWidget {
   final String expenseId;
 
   const ExpenseRequestDetailScreen({super.key, required this.expenseId});
 
+  @override
+  ConsumerState<ExpenseRequestDetailScreen> createState() =>
+      _ExpenseRequestDetailScreenState();
+}
+
+class _ExpenseRequestDetailScreenState
+    extends ConsumerState<ExpenseRequestDetailScreen> {
+  final _noteController = TextEditingController();
+  bool _isSubmitting = false;
+
+  @override
+  void dispose() {
+    _noteController.dispose();
+    super.dispose();
+  }
+
   void _openProject(BuildContext context, ExpenseRequestDetail d) {
-    if (d.project.id.trim().isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          behavior: SnackBarBehavior.floating,
-          content: Text('No project linked to this request'),
-        ),
-      );
-      return;
-    }
+    // Tombol ini hanya dipasang saat d.project.id memang ada (lihat
+    // _buildBody), jadi di sini tinggal navigasi langsung.
     Navigator.push(
       context,
       MaterialPageRoute(
@@ -29,9 +38,40 @@ class ExpenseRequestDetailScreen extends ConsumerWidget {
     );
   }
 
+  Future<void> _submit(bool approve) async {
+    setState(() => _isSubmitting = true);
+    final result = await ref
+        .read(expenseRequestDetailProvider(widget.expenseId).notifier)
+        .sendAction(approve: approve, note: _noteController.text.trim());
+    if (!mounted) return;
+    setState(() => _isSubmitting = false);
+
+    if (result.success) {
+      if (approve) {
+        await showRequestAcceptedDialog(context);
+      } else {
+        await showRequestRejectedDialog(context);
+      }
+      _noteController.clear();
+      return;
+    }
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        behavior: SnackBarBehavior.floating,
+        backgroundColor: Colors.grey.shade800,
+        content: Text(
+          result.message ?? 'Failed to process request, please try again',
+        ),
+      ),
+    );
+  }
+
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final detailAsync = ref.watch(expenseRequestDetailProvider(expenseId));
+  Widget build(BuildContext context) {
+    final detailAsync = ref.watch(
+      expenseRequestDetailProvider(widget.expenseId),
+    );
 
     return Scaffold(
       backgroundColor: Colors.white,
@@ -67,7 +107,7 @@ class ExpenseRequestDetailScreen extends ConsumerWidget {
             const SizedBox(height: 16),
             ElevatedButton(
               onPressed: () => ref
-                  .read(expenseRequestDetailProvider(expenseId).notifier)
+                  .read(expenseRequestDetailProvider(widget.expenseId).notifier)
                   .fetch(),
               child: const Text('Retry'),
             ),
@@ -77,11 +117,16 @@ class ExpenseRequestDetailScreen extends ConsumerWidget {
     );
   }
 
-  Widget _buildBody(BuildContext context, WidgetRef ref, ExpenseRequestDetail d) {
+  Widget _buildBody(
+    BuildContext context,
+    WidgetRef ref,
+    ExpenseRequestDetail d,
+  ) {
     return RefreshIndicator(
       color: NotifColors.gradientEnd,
-      onRefresh: () =>
-          ref.read(expenseRequestDetailProvider(expenseId).notifier).fetch(),
+      onRefresh: () => ref
+          .read(expenseRequestDetailProvider(widget.expenseId).notifier)
+          .fetch(),
       child: SingleChildScrollView(
         physics: const AlwaysScrollableScrollPhysics(),
         padding: const EdgeInsets.fromLTRB(20, 12, 20, 28),
@@ -100,11 +145,13 @@ class ExpenseRequestDetailScreen extends ConsumerWidget {
             const SizedBox(height: 16),
             _buildFilesSection(d),
             const SizedBox(height: 18),
-            RequestOutlinedActionButton(
-              label: 'Open Project',
-              onPressed: () => _openProject(context, d),
-            ),
-            const SizedBox(height: 16),
+            if (d.project.id.trim().isNotEmpty) ...[
+              RequestOutlinedActionButton(
+                label: 'Open Project',
+                onPressed: () => _openProject(context, d),
+              ),
+              const SizedBox(height: 16),
+            ],
             if (d.notes.trim().isNotEmpty && d.notes.trim() != '-') ...[
               Text(
                 'Notes:',
@@ -126,6 +173,22 @@ class ExpenseRequestDetailScreen extends ConsumerWidget {
               const SizedBox(height: 14),
             ],
             RequestStatusBar(status: d.status),
+            if (d.isPending) ...[
+              const SizedBox(height: 18),
+              Text(
+                'Add a note (optional):',
+                style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
+              ),
+              const SizedBox(height: 4),
+              RequestNoteField(controller: _noteController, enabled: true),
+              const SizedBox(height: 14),
+              RequestApprovalButtons(
+                isSubmitting: _isSubmitting,
+                enabled: true,
+                onReject: () => _submit(false),
+                onApprove: () => _submit(true),
+              ),
+            ],
           ],
         ),
       ),
@@ -437,7 +500,10 @@ class _PhaseTile extends StatelessWidget {
                       phase.actionNote.trim().isNotEmpty
                           ? '${phase.actionByName} — ${phase.actionNote}'
                           : phase.actionByName,
-                      style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: Colors.grey.shade600,
+                      ),
                     ),
                   ],
                 ],

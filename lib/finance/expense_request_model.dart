@@ -140,12 +140,26 @@ class ExpenseNamedRef {
   const ExpenseNamedRef({required this.id, required this.name});
 
   factory ExpenseNamedRef.fromJson(dynamic json) {
-    if (json is! Map) return const ExpenseNamedRef(id: '', name: '-');
-    final map = Map<String, dynamic>.from(json);
-    return ExpenseNamedRef(
-      id: (map['id'] ?? '').toString(),
-      name: (map['name'] ?? '-').toString(),
-    );
+    // Backend kadang mengirim relasi ini sebagai object hasil populate
+    // ({"id": "...", "name": "..."}), tapi kadang cuma sebagai ID mentah
+    // (String) saat endpoint yang bersangkutan tidak melakukan populate.
+    // Kalau ini tidak ditangani, id jadi kebaca kosong walau sebenarnya
+    // request tetap punya project, sehingga tombol "Open Project" gagal
+    // secara tidak konsisten.
+    if (json is Map) {
+      final map = Map<String, dynamic>.from(json);
+      return ExpenseNamedRef(
+        id: (map['id'] ?? map['_id'] ?? '').toString(),
+        name: (map['name'] ?? '-').toString(),
+      );
+    }
+    if (json is String && json.trim().isNotEmpty) {
+      // Hanya berupa ID mentah (belum di-populate oleh backend).
+      // Tetap simpan id-nya supaya "Open Project" bisa jalan,
+      // meski nama project belum bisa ditampilkan di sini.
+      return ExpenseNamedRef(id: json.trim(), name: '-');
+    }
+    return const ExpenseNamedRef(id: '', name: '-');
   }
 }
 
