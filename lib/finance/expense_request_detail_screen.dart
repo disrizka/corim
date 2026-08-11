@@ -1,4 +1,5 @@
 import 'package:corim/admin/project/project_detail_screen.dart';
+import 'package:corim/crm/client_detail/client_detail_screen.dart';
 import 'package:corim/finance/expense_request_model.dart';
 import 'package:corim/finance/expense_request_provider.dart';
 import 'package:corim/notifications/notification_style.dart';
@@ -17,21 +18,44 @@ class ExpenseRequestDetailScreen extends ConsumerStatefulWidget {
 }
 
 class _ExpenseRequestDetailScreenState
-    extends ConsumerState<ExpenseRequestDetailScreen> {
+    extends ConsumerState<ExpenseRequestDetailScreen>
+    with SingleTickerProviderStateMixin {
   final _noteController = TextEditingController();
+  late final TabController _tabController;
   bool _isSubmitting = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _tabController = TabController(length: 3, vsync: this);
+  }
 
   @override
   void dispose() {
     _noteController.dispose();
+    _tabController.dispose();
     super.dispose();
   }
 
   void _openProject(BuildContext context, ExpenseRequestDetail d) {
+    if (d.project.id.trim().isEmpty) return;
     Navigator.push(
       context,
       MaterialPageRoute(
         builder: (_) => ProjectDetailScreen(projectId: d.project.id),
+      ),
+    );
+  }
+
+  void _openClient(BuildContext context, ExpenseRequestDetail d) {
+    if (d.client.id.trim().isEmpty) return;
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => ClientDetailScreen(
+          clientId: d.client.id,
+          companyName: d.client.name,
+        ),
       ),
     );
   }
@@ -72,12 +96,16 @@ class _ExpenseRequestDetailScreenState
     );
 
     return Scaffold(
-      backgroundColor: Colors.white,
+      backgroundColor: NotifColors.background,
       appBar: const RequestDetailHeader(),
       body: detailAsync.when(
         data: (d) => _buildBody(context, ref, d),
         loading: () => const Center(child: CircularProgressIndicator()),
         error: (err, st) => _buildError(context, ref, err),
+      ),
+      bottomNavigationBar: detailAsync.maybeWhen(
+        data: (d) => _buildFloatingApprovalBar(d),
+        orElse: () => null,
       ),
     );
   }
@@ -120,73 +148,48 @@ class _ExpenseRequestDetailScreenState
     WidgetRef ref,
     ExpenseRequestDetail d,
   ) {
-    return RefreshIndicator(
-      color: NotifColors.gradientEnd,
-      onRefresh: () => ref
-          .read(expenseRequestDetailProvider(widget.expenseId).notifier)
-          .fetch(),
-      child: SingleChildScrollView(
-        physics: const AlwaysScrollableScrollPhysics(),
-        padding: const EdgeInsets.fromLTRB(20, 12, 20, 28),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            _buildHeaderCard(d),
-            const SizedBox(height: 16),
-            _buildDetailInformationCard(d),
-            const SizedBox(height: 16),
-            if (d.phaseOfRequest.isNotEmpty) ...[
-              _buildPhaseCard(d),
-              const SizedBox(height: 16),
-            ],
-            _buildItemsCard(d),
-            const SizedBox(height: 16),
-            _buildFilesSection(d),
-            const SizedBox(height: 18),
-
-            // Catatan: Tombol "Open Project / View Project Detail" sengaja dihilangkan untuk Expense.
-            if (d.notes.trim().isNotEmpty && d.notes.trim() != '-') ...[
-              Text(
-                'Notes:',
-                style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
-              ),
-              const SizedBox(height: 4),
-              Container(
-                width: double.infinity,
-                padding: const EdgeInsets.all(10),
-                decoration: BoxDecoration(
-                  color: Colors.grey.shade100,
-                  borderRadius: BorderRadius.circular(10),
-                ),
-                child: Text(
-                  d.notes,
-                  style: TextStyle(fontSize: 12.5, color: Colors.grey.shade700),
-                ),
-              ),
-              const SizedBox(height: 14),
-            ],
-            RequestStatusBar(status: d.status),
-            if (d.isPending) ...[
-              const SizedBox(height: 18),
-              Text(
-                'Add a note (optional):',
-                style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
-              ),
-              const SizedBox(height: 4),
-              RequestNoteField(controller: _noteController, enabled: true),
-              const SizedBox(height: 14),
-              RequestApprovalButtons(
-                isSubmitting: _isSubmitting,
-                enabled: true,
-                onReject: () => _submit(false),
-                onApprove: () => _submit(true),
-              ),
-            ],
-          ],
+    return Column(
+      children: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(20, 12, 20, 16),
+          child: _buildHeaderCard(d),
         ),
-      ),
+        Container(
+          color: Colors.white,
+          child: TabBar(
+            controller: _tabController,
+            labelColor: const Color(0xFF075985),
+            unselectedLabelColor: Colors.grey.shade500,
+            indicatorColor: const Color(0xFF075985),
+            labelStyle: const TextStyle(
+              fontSize: 13,
+              fontWeight: FontWeight.w600,
+            ),
+            tabs: const [
+              Tab(text: 'Items'),
+              Tab(text: 'Status'),
+              Tab(text: 'History'),
+            ],
+          ),
+        ),
+        const Divider(height: 1, color: NotifColors.divider),
+        Expanded(
+          child: TabBarView(
+            controller: _tabController,
+            children: [
+              _buildItemsTab(context, ref, d),
+              _buildStatusTab(context, d),
+              _buildHistoryTab(d),
+            ],
+          ),
+        ),
+      ],
     );
   }
+
+  // ---------------------------------------------------------------------
+  // Header (always visible above the tabs)
+  // ---------------------------------------------------------------------
 
   Widget _buildHeaderCard(ExpenseRequestDetail d) {
     return Container(
@@ -199,14 +202,6 @@ class _ExpenseRequestDetailScreenState
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            children: [
-              _HeaderBadge(text: expenseFormTypeLabel(d.formType)),
-              const SizedBox(width: 8),
-              NotifStatusBadge(status: d.status, dense: true),
-            ],
-          ),
-          const SizedBox(height: 10),
           Text(
             d.requestNumber,
             style: const TextStyle(
@@ -229,120 +224,39 @@ class _ExpenseRequestDetailScreenState
     );
   }
 
-  Widget _buildDetailInformationCard(ExpenseRequestDetail d) {
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: NotifColors.cardBorder),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Text(
-            'DETAIL INFORMATION',
-            style: TextStyle(
-              fontSize: 11,
-              fontWeight: FontWeight.w700,
-              letterSpacing: 0.6,
-              color: Colors.grey,
-            ),
-          ),
-          const SizedBox(height: 8),
-          RequestInfoRow(
-            icon: Icons.calendar_today_outlined,
-            label: 'Request Date:',
-            value: d.requestDate,
-          ),
-          RequestInfoRow(
-            icon: Icons.description_outlined,
-            label: 'Form Type:',
-            value: expenseFormTypeLabel(d.formType),
-          ),
-          if (d.operationExpense.trim().isNotEmpty && d.operationExpense != '-')
-            RequestInfoRow(
-              icon: Icons.local_offer_outlined,
-              label: 'Operation:',
-              value: expenseTitleCase(d.operationExpense),
-            ),
-          RequestInfoRow(
-            icon: Icons.apartment_outlined,
-            label: 'Entity:',
-            value: '${d.entity.name} (${d.entity.code})',
-          ),
-          if (d.client.name.trim().isNotEmpty && d.client.name != '-')
-            RequestInfoRow(
-              icon: Icons.business_outlined,
-              label: 'Client:',
-              value: d.client.name,
-            ),
-          // Project Name tetap tampil di sini
-          RequestInfoRow(
-            icon: Icons.folder_outlined,
-            label: 'Project:',
-            value: d.project.name,
-          ),
-          RequestInfoRow(
-            icon: Icons.check_circle_outline_rounded,
-            label: 'Status:',
-            value: d.status,
-          ),
-          RequestInfoRow(
-            icon: Icons.timelapse_rounded,
-            label: 'Current Phase:',
-            value: expenseTitleCase(d.currentPhase),
-          ),
-          RequestInfoRow(
-            icon: Icons.person_outline,
-            label: 'Created By:',
-            value: d.createdBy,
-          ),
-          if (d.revisionCount > 0)
-            RequestInfoRow(
-              icon: Icons.history_rounded,
-              label: 'Revision:',
-              value: '${d.revisionCount}x',
-            ),
-        ],
+  // ---------------------------------------------------------------------
+  // Tab 1: Items (layout differs between PRF/SRF/SSR and STB)
+  // ---------------------------------------------------------------------
+
+  Widget _buildItemsTab(
+    BuildContext context,
+    WidgetRef ref,
+    ExpenseRequestDetail d,
+  ) {
+    return RefreshIndicator(
+      color: NotifColors.gradientEnd,
+      onRefresh: () => ref
+          .read(expenseRequestDetailProvider(widget.expenseId).notifier)
+          .fetch(),
+      child: SingleChildScrollView(
+        physics: const AlwaysScrollableScrollPhysics(),
+        padding: const EdgeInsets.fromLTRB(20, 16, 20, 28),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            d.isSettlementForm
+                ? _buildSettlementItemsCard(d)
+                : _buildStandardItemsCard(d),
+            const SizedBox(height: 16),
+            _buildFilesSection(d),
+          ],
+        ),
       ),
     );
   }
 
-  Widget _buildPhaseCard(ExpenseRequestDetail d) {
-    final phases = [...d.phaseOfRequest]
-      ..sort((a, b) => a.phaseOrder.compareTo(b.phaseOrder));
-
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: NotifColors.cardBorder),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Text(
-            'PHASE OF REQUEST',
-            style: TextStyle(
-              fontSize: 11,
-              fontWeight: FontWeight.w700,
-              letterSpacing: 0.6,
-              color: Colors.grey,
-            ),
-          ),
-          const SizedBox(height: 12),
-          for (var i = 0; i < phases.length; i++)
-            _PhaseTile(phase: phases[i], isLast: i == phases.length - 1),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildItemsCard(ExpenseRequestDetail d) {
+  /// PRF / SRF / SSR: itemized cards (description, qty, rate, due date, amount).
+  Widget _buildStandardItemsCard(ExpenseRequestDetail d) {
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(16),
@@ -376,6 +290,77 @@ class _ExpenseRequestDetailScreenState
     );
   }
 
+  /// STB (settlement/reimbursement): shown as a settlement table with a
+  /// total row, since STB is about reconciling actual spend against the
+  /// requested amount rather than a plain item/qty/rate breakdown.
+  ///
+  /// NOTE: the backend response for STB item lines hasn't been shared yet,
+  /// so this reuses the same [ExpenseItemLine] fields as PRF/SRF/SSU as a
+  /// placeholder. If STB actually returns different fields (e.g. advance
+  /// amount vs realized amount, settlement date, variance), send over a
+  /// sample `detailInformation.items` JSON for an STB request and this tab
+  /// can be adjusted to match exactly.
+  Widget _buildSettlementItemsCard(ExpenseRequestDetail d) {
+    final total = d.items.fold<num>(0, (sum, item) => sum + item.amount);
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: NotifColors.cardBorder),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            'SETTLEMENT DETAIL',
+            style: TextStyle(
+              fontSize: 11,
+              fontWeight: FontWeight.w700,
+              letterSpacing: 0.6,
+              color: Colors.grey,
+            ),
+          ),
+          const SizedBox(height: 10),
+          if (d.items.isEmpty)
+            Text(
+              'No settlement items',
+              style: TextStyle(fontSize: 12.5, color: Colors.grey.shade500),
+            )
+          else ...[
+            const _SettlementHeaderRow(),
+            const Divider(height: 16, color: NotifColors.divider),
+            for (final item in d.items) _SettlementRow(item: item),
+            const Divider(height: 20, color: NotifColors.divider),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                const Text(
+                  'Total',
+                  style: TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w700,
+                    color: Color(0xFF1A1A2E),
+                  ),
+                ),
+                Text(
+                  formatRupiahExpense(total),
+                  style: const TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w800,
+                    color: Color(0xFF075985),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
   Widget _buildFilesSection(ExpenseRequestDetail d) {
     final files = d.allFiles;
     return Column(
@@ -400,29 +385,252 @@ class _ExpenseRequestDetailScreenState
       ],
     );
   }
-}
 
-class _HeaderBadge extends StatelessWidget {
-  final String text;
+  // ---------------------------------------------------------------------
+  // Tab 2: Status (request info, status badge/banner, approval phases)
+  // ---------------------------------------------------------------------
 
-  const _HeaderBadge({required this.text});
+  Widget _buildStatusTab(BuildContext context, ExpenseRequestDetail d) {
+    final phases = [...d.phaseOfRequest]
+      ..sort((a, b) => a.phaseOrder.compareTo(b.phaseOrder));
 
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-      decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.18),
-        borderRadius: BorderRadius.circular(20),
+    return SingleChildScrollView(
+      physics: const AlwaysScrollableScrollPhysics(),
+      padding: const EdgeInsets.fromLTRB(20, 16, 20, 28),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _buildDetailInformationCard(context, d),
+          if (phases.isNotEmpty) ...[
+            const SizedBox(height: 16),
+            _buildPhaseCard(phases),
+          ],
+          if (d.notes.trim().isNotEmpty && d.notes.trim() != '-') ...[
+            const SizedBox(height: 16),
+            Text(
+              'Notes:',
+              style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
+            ),
+            const SizedBox(height: 4),
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: Colors.grey.shade100,
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: Text(
+                d.notes,
+                style: TextStyle(fontSize: 12.5, color: Colors.grey.shade700),
+              ),
+            ),
+          ],
+        ],
       ),
-      child: Text(
-        text,
-        style: const TextStyle(
-          fontSize: 11,
-          fontWeight: FontWeight.w800,
-          letterSpacing: 0.4,
-          color: Colors.white,
+    );
+  }
+
+  Widget _buildDetailInformationCard(
+    BuildContext context,
+    ExpenseRequestDetail d,
+  ) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: NotifColors.cardBorder),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            'DETAIL INFORMATION',
+            style: TextStyle(
+              fontSize: 11,
+              fontWeight: FontWeight.w700,
+              letterSpacing: 0.6,
+              color: Colors.grey,
+            ),
+          ),
+          const SizedBox(height: 8),
+          RequestInfoRow(
+            icon: Icons.calendar_today_outlined,
+            label: 'Request Date:',
+            value: d.requestDateWithTime,
+          ),
+          RequestInfoRow(
+            icon: Icons.description_outlined,
+            label: 'Form Type:',
+            value: expenseFormTypeLabel(d.formType),
+          ),
+          if (d.operationExpense.trim().isNotEmpty && d.operationExpense != '-')
+            RequestInfoRow(
+              icon: Icons.local_offer_outlined,
+              label: 'Operation:',
+              value: expenseTitleCase(d.operationExpense),
+            ),
+          RequestInfoRow(
+            icon: Icons.apartment_outlined,
+            label: 'Entity:',
+            value: '${d.entity.name} (${d.entity.code})',
+          ),
+          if (d.client.name.trim().isNotEmpty && d.client.name != '-')
+            RequestInfoLinkRow(
+              icon: Icons.business_outlined,
+              label: 'Client:',
+              value: d.client.name,
+              onTap: () => _openClient(context, d),
+            ),
+          RequestInfoLinkRow(
+            icon: Icons.folder_outlined,
+            label: 'Project:',
+            value: d.project.name,
+            onTap: () => _openProject(context, d),
+          ),
+          RequestInfoWidgetRow(
+            icon: Icons.check_circle_outline_rounded,
+            label: 'Status:',
+            trailing: NotifStatusBadge(status: d.status, dense: true),
+          ),
+          RequestInfoRow(
+            icon: Icons.timelapse_rounded,
+            label: 'Current Phase:',
+            value: expenseTitleCase(d.currentPhase),
+          ),
+          RequestInfoRow(
+            icon: Icons.person_outline,
+            label: 'Created By:',
+            value: d.createdBy,
+          ),
+          if (d.revisionCount > 0)
+            RequestInfoRow(
+              icon: Icons.history_rounded,
+              label: 'Revision:',
+              value: '${d.revisionCount}x',
+            ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildPhaseCard(List<ExpensePhase> phases) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: NotifColors.cardBorder),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            'PHASE OF REQUEST',
+            style: TextStyle(
+              fontSize: 11,
+              fontWeight: FontWeight.w700,
+              letterSpacing: 0.6,
+              color: Colors.grey,
+            ),
+          ),
+          const SizedBox(height: 12),
+          for (var i = 0; i < phases.length; i++)
+            _PhaseTile(phase: phases[i], isLast: i == phases.length - 1),
+        ],
+      ),
+    );
+  }
+
+  // ---------------------------------------------------------------------
+  // Tab 3: History (past submissions / revisions)
+  // ---------------------------------------------------------------------
+
+  Widget _buildHistoryTab(ExpenseRequestDetail d) {
+    if (d.history.isEmpty) {
+      return Center(
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(
+                Icons.history_rounded,
+                size: 36,
+                color: Colors.grey.shade400,
+              ),
+              const SizedBox(height: 10),
+              Text(
+                'No history yet',
+                style: TextStyle(fontSize: 13, color: Colors.grey.shade500),
+              ),
+            ],
+          ),
         ),
+      );
+    }
+
+    return SingleChildScrollView(
+      physics: const AlwaysScrollableScrollPhysics(),
+      padding: const EdgeInsets.fromLTRB(20, 16, 20, 28),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          for (var i = 0; i < d.history.length; i++)
+            _HistoryTile(
+              entry: d.history[i],
+              isLast: i == d.history.length - 1,
+            ),
+        ],
+      ),
+    );
+  }
+
+  // ---------------------------------------------------------------------
+  // Floating approve/reject bar
+  // ---------------------------------------------------------------------
+
+  Widget? _buildFloatingApprovalBar(ExpenseRequestDetail d) {
+    if (!d.isPending) return null;
+
+    return Container(
+      padding: EdgeInsets.fromLTRB(
+        20,
+        14,
+        20,
+        14 + MediaQuery.of(context).padding.bottom,
+      ),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.10),
+            blurRadius: 18,
+            offset: const Offset(0, -6),
+          ),
+        ],
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'Add a note (optional):',
+            style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
+          ),
+          const SizedBox(height: 4),
+          RequestNoteField(controller: _noteController, enabled: true),
+          const SizedBox(height: 12),
+          RequestApprovalButtons(
+            isSubmitting: _isSubmitting,
+            enabled: true,
+            onReject: () => _submit(false),
+            onApprove: () => _submit(true),
+          ),
+        ],
       ),
     );
   }
@@ -501,6 +709,110 @@ class _PhaseTile extends StatelessWidget {
                     ),
                   ],
                 ],
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _HistoryTile extends StatelessWidget {
+  final ExpenseHistoryEntry entry;
+  final bool isLast;
+
+  const _HistoryTile({required this.entry, required this.isLast});
+
+  @override
+  Widget build(BuildContext context) {
+    return IntrinsicHeight(
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Column(
+            children: [
+              Container(
+                width: 10,
+                height: 10,
+                margin: const EdgeInsets.only(top: 3),
+                decoration: const BoxDecoration(
+                  color: Color(0xFF2563EB),
+                  shape: BoxShape.circle,
+                ),
+              ),
+              if (!isLast)
+                Expanded(
+                  child: Container(
+                    width: 2,
+                    margin: const EdgeInsets.symmetric(vertical: 2),
+                    color: NotifColors.divider,
+                  ),
+                ),
+            ],
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Padding(
+              padding: const EdgeInsets.only(bottom: 16),
+              child: Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFF8F9FC),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Expanded(
+                          child: Text(
+                            entry.formNumber,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                              fontSize: 13,
+                              fontWeight: FontWeight.w700,
+                              color: Color(0xFF1A1A2E),
+                            ),
+                          ),
+                        ),
+                        Text(
+                          entry.createdAt,
+                          style: TextStyle(
+                            fontSize: 11,
+                            color: Colors.grey.shade500,
+                          ),
+                        ),
+                      ],
+                    ),
+                    if (entry.createdByName.trim().isNotEmpty &&
+                        entry.createdByName != '-') ...[
+                      const SizedBox(height: 4),
+                      Text(
+                        entry.createdByName,
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: Colors.grey.shade600,
+                        ),
+                      ),
+                    ],
+                    if (entry.notes.trim().isNotEmpty &&
+                        entry.notes != '-') ...[
+                      const SizedBox(height: 6),
+                      Text(
+                        entry.notes,
+                        style: const TextStyle(
+                          fontSize: 12.5,
+                          color: Color(0xFF444444),
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
               ),
             ),
           ),
@@ -595,6 +907,82 @@ class _ItemStat extends StatelessWidget {
           ),
         ),
       ],
+    );
+  }
+}
+
+class _SettlementHeaderRow extends StatelessWidget {
+  const _SettlementHeaderRow();
+
+  @override
+  Widget build(BuildContext context) {
+    final style = TextStyle(
+      fontSize: 10.5,
+      fontWeight: FontWeight.w700,
+      letterSpacing: 0.3,
+      color: Colors.grey.shade500,
+    );
+    return Row(
+      children: [
+        Expanded(flex: 3, child: Text('DESCRIPTION', style: style)),
+        Expanded(
+          flex: 1,
+          child: Text('QTY', style: style, textAlign: TextAlign.center),
+        ),
+        Expanded(
+          flex: 2,
+          child: Text('AMOUNT', style: style, textAlign: TextAlign.right),
+        ),
+      ],
+    );
+  }
+}
+
+class _SettlementRow extends StatelessWidget {
+  final ExpenseItemLine item;
+
+  const _SettlementRow({required this.item});
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 6),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Expanded(
+            flex: 3,
+            child: Text(
+              item.itemDescription,
+              style: const TextStyle(
+                fontSize: 12.5,
+                fontWeight: FontWeight.w600,
+                color: Color(0xFF1A1A2E),
+              ),
+            ),
+          ),
+          Expanded(
+            flex: 1,
+            child: Text(
+              '${item.qty}',
+              textAlign: TextAlign.center,
+              style: TextStyle(fontSize: 12.5, color: Colors.grey.shade700),
+            ),
+          ),
+          Expanded(
+            flex: 2,
+            child: Text(
+              item.formattedAmount,
+              textAlign: TextAlign.right,
+              style: const TextStyle(
+                fontSize: 12.5,
+                fontWeight: FontWeight.w700,
+                color: Color(0xFF075985),
+              ),
+            ),
+          ),
+        ],
+      ),
     );
   }
 }

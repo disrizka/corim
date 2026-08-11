@@ -1,3 +1,4 @@
+import 'package:corim/api/api.dart';
 import 'package:corim/notifications/notification_style.dart';
 import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -79,30 +80,200 @@ class RequestInfoRow extends StatelessWidget {
   }
 }
 
+/// Same layout as [RequestInfoRow], but the value is a tappable link
+/// (e.g. project or client name that navigates to its own detail page).
+/// Falls back to plain, non-underlined text when [onTap] is null or the
+/// value is empty/"-", so callers don't need to guard against missing data.
+class RequestInfoLinkRow extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final String value;
+  final VoidCallback? onTap;
+
+  const RequestInfoLinkRow({
+    super.key,
+    required this.icon,
+    required this.label,
+    required this.value,
+    this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final isLink = onTap != null && value.trim().isNotEmpty && value != '-';
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 6),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(icon, size: 16, color: Colors.grey.shade600),
+          const SizedBox(width: 10),
+          SizedBox(
+            width: 92,
+            child: Text(
+              label,
+              style: TextStyle(fontSize: 13, color: Colors.grey.shade600),
+            ),
+          ),
+          Expanded(
+            child: isLink
+                ? InkWell(
+                    onTap: onTap,
+                    child: Text(
+                      value,
+                      style: const TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w700,
+                        color: Color(0xFF075985),
+                        decoration: TextDecoration.underline,
+                        decorationColor: Color(0xFF075985),
+                      ),
+                    ),
+                  )
+                : Text(
+                    value,
+                    style: const TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600,
+                      color: Color(0xFF1A1A2E),
+                    ),
+                  ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Same layout as [RequestInfoRow], but the value slot renders an arbitrary
+/// widget (e.g. a status badge) instead of plain text.
+class RequestInfoWidgetRow extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final Widget trailing;
+
+  const RequestInfoWidgetRow({
+    super.key,
+    required this.icon,
+    required this.label,
+    required this.trailing,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 6),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: [
+          Icon(icon, size: 16, color: Colors.grey.shade600),
+          const SizedBox(width: 10),
+          SizedBox(
+            width: 92,
+            child: Text(
+              label,
+              style: TextStyle(fontSize: 13, color: Colors.grey.shade600),
+            ),
+          ),
+          Align(alignment: Alignment.centerLeft, child: trailing),
+        ],
+      ),
+    );
+  }
+}
+
 class RequestFileTile extends StatelessWidget {
   final dynamic file;
 
   const RequestFileTile({super.key, required this.file});
 
+  static const _urlKeys = [
+    'url',
+    'path',
+    'fileUrl',
+    'filePath',
+    'documentUrl',
+    'downloadUrl',
+    'link',
+    'src',
+    'file',
+    'fileName',
+    'filename',
+  ];
+
+  static const _labelKeys = [
+    'name',
+    'fileName',
+    'filename',
+    'originalName',
+    'originalFileName',
+    'title',
+  ];
+
   String get _label {
     if (file is Map) {
-      return (file['name'] ?? file['fileName'] ?? _urlFromFile.split('/').last)
-          .toString();
+      final map = file as Map;
+      for (final key in _labelKeys) {
+        final v = map[key];
+        if (v != null && v.toString().trim().isNotEmpty) return v.toString();
+      }
+      final raw = _rawUrlFromFile;
+      return raw.isNotEmpty ? raw.split('/').last : 'file';
     }
-    return file.toString().split('/').last;
+    final raw = file.toString();
+    return raw.isNotEmpty ? raw.split('/').last : 'file';
   }
 
-  String get _urlFromFile {
+  String get _rawUrlFromFile {
     if (file is String) return file;
-    if (file is Map) return (file['url'] ?? file['path'] ?? '').toString();
+    if (file is Map) {
+      final map = file as Map;
+      for (final key in _urlKeys) {
+        final v = map[key];
+        if (v != null && v.toString().trim().isNotEmpty) return v.toString();
+      }
+    }
     return '';
+  }
+
+  /// The backend often stores files as a bare relative path (e.g.
+  /// "expenses/xxx.pdf") instead of a full URL. A schemeless path can't be
+  /// opened directly, so it needs [ApiConfig.storageBaseUrl] prepended.
+  /// Values that already have a scheme (http/https) are left as-is.
+  String get _urlFromFile {
+    final raw = _rawUrlFromFile;
+    if (raw.isEmpty) return raw;
+    final uri = Uri.tryParse(raw);
+    if (uri != null && uri.hasScheme) return raw;
+    return ApiConfig.storageBaseUrl + raw.replaceFirst(RegExp(r'^/'), '');
   }
 
   Future<void> _open(BuildContext context) async {
     final url = _urlFromFile;
-    if (url.isEmpty) return;
+    if (url.isEmpty) {
+      // No known key held a usable value. Surface the raw keys so this is
+      // debuggable from the device itself instead of failing silently.
+      final debugInfo = file is Map
+          ? ' (keys: ${(file as Map).keys.join(', ')})'
+          : ' (value: "$file")';
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          behavior: SnackBarBehavior.floating,
+          content: Text('File location not available$debugInfo'),
+        ),
+      );
+      return;
+    }
     final uri = Uri.tryParse(url);
-    if (uri == null) return;
+    if (uri == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          behavior: SnackBarBehavior.floating,
+          content: Text('Invalid file link for $_label'),
+        ),
+      );
+      return;
+    }
 
     final canOpen = await canLaunchUrl(uri);
     if (!context.mounted) return;
@@ -113,7 +284,7 @@ class RequestFileTile extends StatelessWidget {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           behavior: SnackBarBehavior.floating,
-          content: Text('Unable to open $_label'),
+          content: Text('Unable to open $_label ($url)'),
         ),
       );
     }

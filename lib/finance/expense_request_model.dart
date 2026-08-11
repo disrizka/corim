@@ -35,6 +35,20 @@ String expenseTitleCase(String value) {
       .join(' ');
 }
 
+/// Extracts "HH:mm" from a timestamp string, handling both
+/// "YYYY-MM-DD HH:mm:ss" and ISO-8601 ("YYYY-MM-DDTHH:mm:ss.sssZ") formats
+/// (DateTime.tryParse understands both). Returns '' if it can't be parsed.
+String expenseTimeOf(String raw) {
+  final trimmed = raw.trim();
+  if (trimmed.isEmpty || trimmed == '-') return '';
+  final dt = DateTime.tryParse(trimmed);
+  if (dt == null) return '';
+  final local = dt.toLocal();
+  final hh = local.hour.toString().padLeft(2, '0');
+  final mm = local.minute.toString().padLeft(2, '0');
+  return '$hh:$mm';
+}
+
 class ExpenseRequestItem {
   final String id;
   final num amount;
@@ -72,11 +86,7 @@ class ExpenseRequestItem {
   String get formattedAmount => formatRupiahExpense(amount);
   String get createdDatePart =>
       createdAt.contains(' ') ? createdAt.split(' ').first : createdAt;
-  String get createdTimePart {
-    if (!createdAt.contains(' ')) return '';
-    final time = createdAt.split(' ').last;
-    return time.length >= 5 ? time.substring(0, 5) : time;
-  }
+  String get createdTimePart => expenseTimeOf(createdAt);
 
   factory ExpenseRequestItem.fromJson(Map<String, dynamic> json) {
     final rawHistory = (json['history'] is List)
@@ -278,6 +288,7 @@ class ExpenseRequestDetail {
   final ExpenseEntityRef entity;
   final List<dynamic> evidenceFile;
   final String formType;
+  final List<ExpenseHistoryEntry> history;
   final String invoiceDate;
   final String notes;
   final String operationExpense;
@@ -303,6 +314,7 @@ class ExpenseRequestDetail {
     required this.entity,
     required this.evidenceFile,
     required this.formType,
+    required this.history,
     required this.invoiceDate,
     required this.notes,
     required this.operationExpense,
@@ -320,7 +332,24 @@ class ExpenseRequestDetail {
   bool get isApproved => status.toUpperCase() == 'APPROVED';
   bool get isRejected => status.toUpperCase() == 'REJECTED';
 
+  /// True for form types whose "Items" tab should render as a settlement
+  /// (STB) instead of a simple item/qty/rate list (PRF/SRF/SSR).
+  bool get isSettlementForm => formType.toUpperCase() == 'STB';
+
   String get formattedAmount => formatRupiahExpense(amount);
+
+  /// Time portion of [createdAt], used to append a time to the otherwise
+  /// date-only [requestDate].
+  String get createdTimePart => expenseTimeOf(createdAt);
+
+  /// [requestDate] with the time appended, e.g. "12 August 2026, 15:00".
+  String get requestDateWithTime {
+    final time = createdTimePart;
+    if (time.isEmpty || requestDate.trim().isEmpty || requestDate == '-') {
+      return requestDate;
+    }
+    return '$requestDate, $time';
+  }
 
   List<dynamic> get allFiles => [...evidenceFile, ...uploadFile];
 
@@ -334,6 +363,10 @@ class ExpenseRequestDetail {
 
     final rawPhases = (json['phaseOfRequest'] is List)
         ? json['phaseOfRequest'] as List
+        : const [];
+
+    final rawHistory = (json['history'] is List)
+        ? json['history'] as List
         : const [];
 
     final createdByUser = (json['createdByUser'] is Map)
@@ -362,6 +395,13 @@ class ExpenseRequestDetail {
           ? json['evidenceFile'] as List
           : const [],
       formType: (json['formType'] ?? '-').toString(),
+      history: rawHistory
+          .map(
+            (e) => ExpenseHistoryEntry.fromJson(
+              Map<String, dynamic>.from(e as Map),
+            ),
+          )
+          .toList(),
       invoiceDate: (json['invoiceDate'] ?? '').toString(),
       notes: (json['notes'] ?? '-').toString(),
       operationExpense: (json['operationExpense'] ?? '-').toString(),
