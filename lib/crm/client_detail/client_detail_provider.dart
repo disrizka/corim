@@ -19,22 +19,27 @@ final clientDetailProvider = FutureProvider.autoDispose
       throw Exception(body['message'] ?? 'Gagal memuat detail client');
     });
 
+// Mengambil list project khusus client secara langsung & cepat
 final clientProjectListProvider = FutureProvider.autoDispose
     .family<List<ProjectListItem>, String>((ref, companyName) async {
+      if (companyName.trim().isEmpty) return [];
+
       final client = ref.read(authHttpClientProvider);
       final res = await client.get(
-        Uri.parse('${ApiConfig.baseUrl}${Endpoints.projects}'),
+        Uri.parse(
+          '${ApiConfig.baseUrl}${Endpoints.projects}',
+        ).replace(queryParameters: {'limit': '50'}),
       );
+
       final body = jsonDecode(res.body);
-      if (body['status'] == 200) {
-        final all = (body['data'] as List)
-            .map((e) => ProjectListItem.fromJson(e))
-            .toList();
-        return all
-            .where(
-              (p) => p.clientName.toLowerCase() == companyName.toLowerCase(),
-            )
-            .toList();
+      if (body['status'] != 200) {
+        throw Exception(body['message'] ?? 'Gagal memuat project client');
       }
-      throw Exception('Gagal memuat data project');
+
+      final data = (body['data'] as List? ?? []);
+      final items = data.map((e) => ProjectListItem.fromJson(e)).toList();
+
+      return items
+          .where((p) => p.clientName.toLowerCase() == companyName.toLowerCase())
+          .toList();
     });

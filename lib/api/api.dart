@@ -12,6 +12,7 @@ class Endpoints {
   static const String profile = "profile";
   static const String clients = "clients";
   static String clientDetail(String id) => "clients/$id";
+  static const String entities = "entities";
   static const String projects = "projects";
   static String projectDetail(String id) => "projects/$id";
   static String projectSalesStatusQuotations(String id) =>

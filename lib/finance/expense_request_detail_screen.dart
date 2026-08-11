@@ -28,8 +28,6 @@ class _ExpenseRequestDetailScreenState
   }
 
   void _openProject(BuildContext context, ExpenseRequestDetail d) {
-    // Tombol ini hanya dipasang saat d.project.id memang ada (lihat
-    // _buildBody), jadi di sini tinggal navigasi langsung.
     Navigator.push(
       context,
       MaterialPageRoute(
@@ -145,13 +143,8 @@ class _ExpenseRequestDetailScreenState
             const SizedBox(height: 16),
             _buildFilesSection(d),
             const SizedBox(height: 18),
-            if (d.project.id.trim().isNotEmpty) ...[
-              RequestOutlinedActionButton(
-                label: 'Open Project',
-                onPressed: () => _openProject(context, d),
-              ),
-              const SizedBox(height: 16),
-            ],
+
+            // Catatan: Tombol "Open Project / View Project Detail" sengaja dihilangkan untuk Expense.
             if (d.notes.trim().isNotEmpty && d.notes.trim() != '-') ...[
               Text(
                 'Notes:',
@@ -285,6 +278,7 @@ class _ExpenseRequestDetailScreenState
               label: 'Client:',
               value: d.client.name,
             ),
+          // Project Name tetap tampil di sini
           RequestInfoRow(
             icon: Icons.folder_outlined,
             label: 'Project:',

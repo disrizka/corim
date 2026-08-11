@@ -175,7 +175,7 @@ class ExpenseRequestListNotifier
               'search': state.filter.search,
               'status': state.filter.status,
               'formType': state.filter.formType,
-              'entity': state.filter.entityId,
+              'entityId': state.filter.entityId,
             },
           );
 

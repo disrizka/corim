@@ -333,12 +333,18 @@ class _NotificationDetailScreenState
             for (final f in n.files) _buildFileTile(f),
 
           const SizedBox(height: 18),
-          RequestOutlinedActionButton(
-            label: 'View Project Detail',
-            onPressed: () => _openProject(n),
-          ),
-          if (n.isExpenseRequest) ...[
+
+          // Tombol 'View Project Detail' HANYA muncul jika BUKAN Expense Request
+          // dan mempunyai ID Project yang valid
+          if (!n.isExpenseRequest && n.projectId.trim().isNotEmpty) ...[
+            RequestOutlinedActionButton(
+              label: 'View Project Detail',
+              onPressed: () => _openProject(n),
+            ),
             const SizedBox(height: 10),
+          ],
+
+          if (n.isExpenseRequest) ...[
             RequestOutlinedActionButton(
               label: 'Detail Expense',
               onPressed: () => _openExpenseDetail(n),

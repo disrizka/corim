@@ -20,20 +20,13 @@ class RequestDetailHeader extends StatelessWidget
         ),
         onPressed: () => Navigator.pop(context),
       ),
-      title: const Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Text(
-            'Request Detail',
-            style: TextStyle(
-              color: Colors.black87,
-              fontSize: 15,
-              fontWeight: FontWeight.w700,
-            ),
-          ),
-          SizedBox(height: 2),
-          Text('Overview', style: TextStyle(color: Colors.grey, fontSize: 11)),
-        ],
+      title: const Text(
+        'Request Detail',
+        style: TextStyle(
+          color: Colors.black87,
+          fontSize: 15,
+          fontWeight: FontWeight.w700,
+        ),
       ),
     );
   }

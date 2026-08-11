@@ -1,5 +1,7 @@
 import 'dart:async';
 
+import 'package:corim/finance/entity_model.dart';
+import 'package:corim/finance/entity_provider.dart';
 import 'package:corim/finance/expense_request_detail_screen.dart';
 import 'package:corim/finance/expense_request_model.dart';
 import 'package:corim/finance/expense_request_provider.dart';
@@ -60,8 +62,17 @@ class _ExpenseRequestListScreenState
     final state = ref.read(expenseRequestListProvider);
     var draft = state.filter;
 
-    final entityOptions = state.knownEntities.values.toList()
-      ..sort((a, b) => a.name.compareTo(b.name));
+    // Prefer the real `GET /entities` list so every entity shows up in the
+    // filter, not just the ones that happen to be present on the requests
+    // already loaded on screen. Fall back to whatever entities we've seen
+    // in the loaded items if that list hasn't loaded yet.
+    final fetchedEntities = ref.read(entityOptionsProvider);
+    final entityOptions = fetchedEntities.isNotEmpty
+        ? fetchedEntities
+        : (state.knownEntities.values
+              .map((e) => EntityItem(id: e.id, code: e.code, name: e.name))
+              .toList()
+            ..sort((a, b) => a.name.compareTo(b.name)));
 
     await showModalBottomSheet(
       context: context,
@@ -120,7 +131,7 @@ class _ExpenseRequestListScreenState
                         ),
                         for (final e in entityOptions)
                           _filterChip(
-                            label: e.name,
+                            label: e.displayLabel,
                             selected: draft.entityId == e.id,
                             onTap: () => setSheetState(
                               () => draft = draft.copyWith(entityId: e.id),
@@ -262,6 +273,9 @@ class _ExpenseRequestListScreenState
   @override
   Widget build(BuildContext context) {
     final state = ref.watch(expenseRequestListProvider);
+    // Kick off (and keep cached) the entities fetch as soon as this screen
+    // is shown, so it's ready by the time the filter sheet opens.
+    ref.watch(entityListProvider);
 
     return Scaffold(
       backgroundColor: NotifColors.background,
@@ -369,6 +383,15 @@ class _ExpenseRequestListScreenState
       );
     }
 
+    // The list API doesn't include an `entity` object per item (only the
+    // detail endpoint does). When a single entity is selected in the
+    // filter, every visible item necessarily belongs to it, so we can
+    // still show a correct badge by resolving the filter's entityId
+    // against the entities we fetched from `GET /entities`.
+    final filterEntity = state.filter.entityId.isEmpty
+        ? null
+        : ref.watch(entityByIdProvider)[state.filter.entityId];
+
     return SliverPadding(
       padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
       sliver: SliverList(
@@ -376,7 +399,10 @@ class _ExpenseRequestListScreenState
           if (index < state.items.length) {
             return Padding(
               padding: const EdgeInsets.only(bottom: 12),
-              child: _ExpenseRequestCard(item: state.items[index]),
+              child: _ExpenseRequestCard(
+                item: state.items[index],
+                fallbackEntity: filterEntity,
+              ),
             );
           }
           return _buildListFooter(state);
@@ -595,8 +621,12 @@ class _ExpenseRequestListScreenState
 
 class _ExpenseRequestCard extends StatelessWidget {
   final ExpenseRequestItem item;
+  // Resolved entity to fall back to when the list API didn't send one for
+  // this item (see the note in `_buildContentSliver`). Null when no single
+  // entity is selected in the filter, in which case the badge is hidden.
+  final EntityItem? fallbackEntity;
 
-  const _ExpenseRequestCard({required this.item});
+  const _ExpenseRequestCard({required this.item, this.fallbackEntity});
 
   void _openDetail(BuildContext context) {
     Navigator.push(
@@ -690,7 +720,10 @@ class _ExpenseRequestCard extends StatelessWidget {
                   ),
                 ),
                 const SizedBox(height: 12),
-                _EntityBadge(entity: item.entity),
+                _EntityBadge(
+                  code: item.entity?.code ?? fallbackEntity?.code,
+                  name: item.entity?.name ?? fallbackEntity?.name,
+                ),
                 const SizedBox(height: 14),
                 SizedBox(
                   width: double.infinity,
@@ -768,12 +801,26 @@ class _ExpenseRequestCard extends StatelessWidget {
 }
 
 class _EntityBadge extends StatelessWidget {
-  final ExpenseEntityRef entity;
+  final String? code;
+  final String? name;
 
-  const _EntityBadge({required this.entity});
+  const _EntityBadge({this.code, this.name});
 
   @override
   Widget build(BuildContext context) {
+    final resolvedName = name;
+    if (resolvedName == null || resolvedName.isEmpty || resolvedName == '-') {
+      // No entity info available for this item (list API doesn't send one,
+      // and no single-entity filter is active to fall back on) — hide the
+      // badge instead of showing a misleading "-".
+      return const SizedBox.shrink();
+    }
+    final resolvedCode = code;
+    final label =
+        (resolvedCode != null && resolvedCode.isNotEmpty && resolvedCode != '-')
+        ? '$resolvedCode - $resolvedName'
+        : resolvedName;
+
     return Align(
       alignment: Alignment.centerLeft,
       child: Container(
@@ -794,7 +841,7 @@ class _EntityBadge extends StatelessWidget {
             ConstrainedBox(
               constraints: const BoxConstraints(maxWidth: 160),
               child: Text(
-                entity.name,
+                label,
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
                 style: const TextStyle(
