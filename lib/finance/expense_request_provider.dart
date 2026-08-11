@@ -17,22 +17,29 @@ class ExpenseRequestFilter {
   final String search;
   final String status;
   final String formType;
+  final String entityId;
 
   const ExpenseRequestFilter({
     this.search = '',
     this.status = '',
     this.formType = '',
+    this.entityId = '',
   });
+
+  bool get hasActiveFilters =>
+      status.isNotEmpty || formType.isNotEmpty || entityId.isNotEmpty;
 
   ExpenseRequestFilter copyWith({
     String? search,
     String? status,
     String? formType,
+    String? entityId,
   }) {
     return ExpenseRequestFilter(
       search: search ?? this.search,
       status: status ?? this.status,
       formType: formType ?? this.formType,
+      entityId: entityId ?? this.entityId,
     );
   }
 
@@ -41,10 +48,11 @@ class ExpenseRequestFilter {
       other is ExpenseRequestFilter &&
       other.search == search &&
       other.status == status &&
-      other.formType == formType;
+      other.formType == formType &&
+      other.entityId == entityId;
 
   @override
-  int get hashCode => Object.hash(search, status, formType);
+  int get hashCode => Object.hash(search, status, formType, entityId);
 }
 
 class ExpenseRequestPageMeta {
@@ -78,6 +86,8 @@ class ExpenseRequestListState {
   final bool isLoading;
   final bool isLoadingMore;
   final Object? error;
+  final Object? loadMoreError;
+  final Map<String, ExpenseEntityRef> knownEntities;
 
   const ExpenseRequestListState({
     this.items = const [],
@@ -86,6 +96,8 @@ class ExpenseRequestListState {
     this.isLoading = true,
     this.isLoadingMore = false,
     this.error,
+    this.loadMoreError,
+    this.knownEntities = const {},
   });
 
   bool get hasNextPage => meta.currentPage < meta.totalPages;
@@ -99,6 +111,9 @@ class ExpenseRequestListState {
     bool? isLoadingMore,
     Object? error,
     bool clearError = false,
+    Object? loadMoreError,
+    bool clearLoadMoreError = false,
+    Map<String, ExpenseEntityRef>? knownEntities,
   }) {
     return ExpenseRequestListState(
       items: items ?? this.items,
@@ -107,6 +122,10 @@ class ExpenseRequestListState {
       isLoading: isLoading ?? this.isLoading,
       isLoadingMore: isLoadingMore ?? this.isLoadingMore,
       error: clearError ? null : (error ?? this.error),
+      loadMoreError: clearLoadMoreError
+          ? null
+          : (loadMoreError ?? this.loadMoreError),
+      knownEntities: knownEntities ?? this.knownEntities,
     );
   }
 }
@@ -120,12 +139,31 @@ class ExpenseRequestListNotifier
     fetchPage(1);
   }
 
-  Future<void> fetchPage(int page) async {
-    state = state.copyWith(
-      isLoading: true,
-      isLoadingMore: false,
-      clearError: true,
-    );
+  Map<String, ExpenseEntityRef> _mergeKnownEntities(
+    List<ExpenseRequestItem> items,
+  ) {
+    final merged = Map<String, ExpenseEntityRef>.from(state.knownEntities);
+    for (final item in items) {
+      if (item.entity.id.isNotEmpty) {
+        merged[item.entity.id] = item.entity;
+      }
+    }
+    return merged;
+  }
+
+  /// Fetches [page]. When [append] is true (infinite scroll "load more"),
+  /// results are appended to the existing list instead of replacing it.
+  Future<void> fetchPage(int page, {bool append = false}) async {
+    if (append) {
+      state = state.copyWith(isLoadingMore: true, clearLoadMoreError: true);
+    } else {
+      state = state.copyWith(
+        isLoading: true,
+        isLoadingMore: false,
+        clearError: true,
+        clearLoadMoreError: true,
+      );
+    }
 
     try {
       final token = ref.read(authProvider).accessToken ?? '';
@@ -137,6 +175,7 @@ class ExpenseRequestListNotifier
               'search': state.filter.search,
               'status': state.filter.status,
               'formType': state.filter.formType,
+              'entity': state.filter.entityId,
             },
           );
 
@@ -149,10 +188,10 @@ class ExpenseRequestListNotifier
             .read(authProvider.notifier)
             .refreshFromInterceptor();
         if (newToken == null) {
-          state = state.copyWith(
-            isLoading: false,
-            error: 'Sesi berakhir, silakan login kembali',
-          );
+          final message = 'Sesi berakhir, silakan login kembali';
+          state = append
+              ? state.copyWith(isLoadingMore: false, loadMoreError: message)
+              : state.copyWith(isLoading: false, error: message);
           return;
         }
         response = await http.get(uri, headers: _headers(newToken));
@@ -161,7 +200,7 @@ class ExpenseRequestListNotifier
       if (response.statusCode == 200) {
         final body = jsonDecode(response.body);
         final List<dynamic> rawList = (body['data'] ?? []) as List<dynamic>;
-        final items = rawList
+        final newItems = rawList
             .map((e) => ExpenseRequestItem.fromJson(e as Map<String, dynamic>))
             .toList();
         final meta = ExpenseRequestPageMeta.fromJson(
@@ -169,45 +208,37 @@ class ExpenseRequestListNotifier
         );
 
         state = state.copyWith(
-          items: items,
+          items: append ? [...state.items, ...newItems] : newItems,
           meta: meta,
           isLoading: false,
+          isLoadingMore: false,
           clearError: true,
+          clearLoadMoreError: true,
+          knownEntities: _mergeKnownEntities(newItems),
         );
       } else {
         print('[EXPENSE] Body: ${response.body}');
-        state = state.copyWith(
-          isLoading: false,
-          error:
-              'Gagal memuat daftar expense request (${response.statusCode})\n${response.body}',
-        );
+        final message =
+            'Gagal memuat daftar expense request (${response.statusCode})\n${response.body}';
+        state = append
+            ? state.copyWith(isLoadingMore: false, loadMoreError: message)
+            : state.copyWith(isLoading: false, error: message);
       }
     } catch (e, st) {
       print('[EXPENSE] Exception: $e');
       print('[EXPENSE] Stack: $st');
-      state = state.copyWith(isLoading: false, error: e);
+      state = append
+          ? state.copyWith(isLoadingMore: false, loadMoreError: e)
+          : state.copyWith(isLoading: false, error: e);
     }
   }
 
-  Future<void> refresh() => fetchPage(state.meta.currentPage);
+  Future<void> refresh() => fetchPage(1);
 
-  Future<void> nextPage() async {
-    if (!state.hasNextPage) return;
-    await fetchPage(state.meta.currentPage + 1);
-  }
-
-  Future<void> prevPage() async {
-    if (!state.hasPrevPage) return;
-    await fetchPage(state.meta.currentPage - 1);
-  }
-
-  Future<void> goToPage(int page) async {
-    if (page < 1 ||
-        page > state.meta.totalPages ||
-        page == state.meta.currentPage) {
-      return;
-    }
-    await fetchPage(page);
+  /// Loads the next page and appends it to the current list (infinite scroll).
+  Future<void> loadMore() async {
+    if (state.isLoading || state.isLoadingMore || !state.hasNextPage) return;
+    await fetchPage(state.meta.currentPage + 1, append: true);
   }
 
   Future<void> applyFilter(ExpenseRequestFilter filter) async {

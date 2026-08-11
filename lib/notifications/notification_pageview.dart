@@ -220,3 +220,180 @@ class _NotificationPageViewState extends ConsumerState<NotificationPageView> {
     );
   }
 }
+
+/// Infinite-scroll variant of [NotificationPageView].
+///
+/// Instead of paging through discrete pages with a page indicator, this
+/// flattens every page loaded so far into a single scrollable list and
+/// automatically requests the next page from [notificationListProvider]
+/// once the user scrolls near the bottom.
+class NotificationInfiniteListView extends ConsumerStatefulWidget {
+  final NotificationCardBuilder cardBuilder;
+  final NotificationFilterMatcher? filter;
+  final String searchQuery;
+  final NotificationSearchMatcher? searchMatcher;
+  final NotificationSortRank? sortRank;
+  final WidgetBuilder emptyBuilder;
+  final Widget Function(BuildContext context, bool hasSearch)
+  emptyFilterBuilder;
+  final Widget Function(BuildContext context, Object error) errorBuilder;
+  final EdgeInsetsGeometry listPadding;
+
+  const NotificationInfiniteListView({
+    super.key,
+    required this.cardBuilder,
+    required this.emptyBuilder,
+    required this.emptyFilterBuilder,
+    required this.errorBuilder,
+    this.filter,
+    this.searchQuery = '',
+    this.searchMatcher,
+    this.sortRank,
+    this.listPadding = const EdgeInsets.fromLTRB(16, 16, 16, 24),
+  });
+
+  @override
+  ConsumerState<NotificationInfiniteListView> createState() =>
+      _NotificationInfiniteListViewState();
+}
+
+class _NotificationInfiniteListViewState
+    extends ConsumerState<NotificationInfiniteListView> {
+  final ScrollController _scrollController = ScrollController();
+  static const double _loadMoreThreshold = 240;
+
+  @override
+  void initState() {
+    super.initState();
+    _scrollController.addListener(_onScroll);
+  }
+
+  @override
+  void dispose() {
+    _scrollController.removeListener(_onScroll);
+    _scrollController.dispose();
+    super.dispose();
+  }
+
+  void _onScroll() {
+    if (!_scrollController.hasClients) return;
+    final position = _scrollController.position;
+    if (position.pixels >= position.maxScrollExtent - _loadMoreThreshold) {
+      _maybeLoadNextPage();
+    }
+  }
+
+  void _maybeLoadNextPage() {
+    final state = ref.read(notificationListProvider);
+    final loadedPages = state.pages.keys.toList()..sort();
+    final lastLoadedPage = loadedPages.isEmpty ? 0 : loadedPages.last;
+    final nextPage = lastLoadedPage + 1;
+    final totalPages = state.meta.totalPages < 1 ? 1 : state.meta.totalPages;
+
+    if (nextPage > totalPages) return;
+    if (state.isPageLoaded(nextPage) || state.isPageLoading(nextPage)) return;
+
+    ref.read(notificationListProvider.notifier).fetchPage(nextPage);
+  }
+
+  Future<void> _onRefresh() {
+    return ref.read(notificationListProvider.notifier).fetch();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final state = ref.watch(notificationListProvider);
+
+    if (state.isInitialLoading) {
+      return const Center(
+        child: CircularProgressIndicator(color: NotifColors.gradientEnd),
+      );
+    }
+
+    if (state.error != null && state.pages.isEmpty) {
+      return widget.errorBuilder(context, state.error!);
+    }
+
+    final loadedPages = state.pages.keys.toList()..sort();
+    final rawItems = <NotificationItem>[
+      for (final page in loadedPages) ...state.pageItems(page),
+    ];
+
+    if (rawItems.isEmpty) {
+      return widget.emptyBuilder(context);
+    }
+
+    var items = rawItems;
+    if (widget.filter != null) {
+      items = items.where(widget.filter!).toList();
+    }
+    final query = widget.searchQuery.trim();
+    if (query.isNotEmpty && widget.searchMatcher != null) {
+      items = items.where((n) => widget.searchMatcher!(n, query)).toList();
+    }
+    if (widget.sortRank != null) {
+      items = [...items]
+        ..sort((a, b) => widget.sortRank!(a).compareTo(widget.sortRank!(b)));
+    }
+
+    if (items.isEmpty) {
+      return widget.emptyFilterBuilder(context, query.isNotEmpty);
+    }
+
+    final totalPages = state.meta.totalPages < 1 ? 1 : state.meta.totalPages;
+    final lastLoadedPage = loadedPages.isEmpty ? 0 : loadedPages.last;
+    final nextPage = lastLoadedPage + 1;
+    final hasMore = lastLoadedPage < totalPages;
+    final nextPageFailed = state.didPageFail(nextPage);
+
+    return RefreshIndicator(
+      color: NotifColors.gradientEnd,
+      onRefresh: _onRefresh,
+      child: ListView.separated(
+        controller: _scrollController,
+        padding: widget.listPadding,
+        physics: const AlwaysScrollableScrollPhysics(),
+        itemCount: items.length + (hasMore ? 1 : 0),
+        separatorBuilder: (_, __) => const SizedBox(height: 12),
+        itemBuilder: (context, i) {
+          if (i >= items.length) {
+            if (nextPageFailed) {
+              return Padding(
+                padding: const EdgeInsets.symmetric(vertical: 16),
+                child: Center(
+                  child: TextButton(
+                    onPressed: () => ref
+                        .read(notificationListProvider.notifier)
+                        .fetchPage(nextPage),
+                    child: const Text('Retry loading more'),
+                  ),
+                ),
+              );
+            }
+
+            WidgetsBinding.instance.addPostFrameCallback((_) {
+              if (!mounted) return;
+              _maybeLoadNextPage();
+            });
+
+            return const Padding(
+              padding: EdgeInsets.symmetric(vertical: 20),
+              child: Center(
+                child: SizedBox(
+                  width: 22,
+                  height: 22,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2.4,
+                    color: NotifColors.gradientEnd,
+                  ),
+                ),
+              ),
+            );
+          }
+
+          return widget.cardBuilder(context, items[i]);
+        },
+      ),
+    );
+  }
+}

@@ -43,7 +43,6 @@ class NotificationItem {
   bool get isApproved => approvalStatus.toUpperCase() == 'APPROVED';
   bool get isRejected => approvalStatus.toUpperCase() == 'REJECTED';
 
-
   RequestKind get kind {
     final t = notificationType.toUpperCase();
     if (t.contains('EXPENSE') || t.contains('FINANCE')) {
@@ -74,6 +73,13 @@ class NotificationItem {
       result = result.replaceAll(en, id);
     });
     return result;
+  }
+
+  /// [activityTime] without seconds, e.g. "14:30:00" -> "14:30".
+  /// Falls back to the raw value if it doesn't match a HH:mm:ss pattern.
+  String get activityTimeShort {
+    final match = RegExp(r'^(\d{1,2}:\d{2}):\d{2}$').firstMatch(activityTime);
+    return match?.group(1) ?? activityTime;
   }
 
   NotificationItem copyWith({String? approvalStatus, String? note}) {

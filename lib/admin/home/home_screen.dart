@@ -62,7 +62,6 @@ class HomeScreen extends ConsumerStatefulWidget {
 class _HomeScreenState extends ConsumerState<HomeScreen> {
   _HomeFilter _filter = _HomeFilter.all;
   final _searchController = TextEditingController();
-  int _requestListPage = 1;
   static const double _bottomNavReservedHeight = 16 + 56 + 16;
 
   @override
@@ -331,7 +330,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
       padding: const EdgeInsets.symmetric(horizontal: 16),
       child: Padding(
         padding: const EdgeInsets.only(bottom: _bottomNavReservedHeight),
-        child: NotificationPageView(
+        child: NotificationInfiniteListView(
           cardBuilder: (context, item) => Padding(
             padding: const EdgeInsets.only(bottom: 12),
             child: _buildRequestCard(item),
@@ -340,7 +339,6 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
           searchQuery: _searchController.text,
           searchMatcher: _matchesSearch,
           sortRank: (n) => n.isPending ? 0 : 1,
-          onPageChanged: (page) => setState(() => _requestListPage = page),
           emptyBuilder: (context) => _buildEmptyState(),
           emptyFilterBuilder: (context, hasSearch) => _buildEmptyFilterState(),
           errorBuilder: (context, err) => _buildErrorState(err),
@@ -468,8 +466,8 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   Widget _buildEmptyFilterState() {
     final query = _searchController.text.trim();
     final message = query.isEmpty
-        ? 'No requests for "${_filter.label}" on page $_requestListPage'
-        : 'No requests match "$query" on page $_requestListPage';
+        ? 'No requests for "${_filter.label}"'
+        : 'No requests match "$query"';
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 32),
       child: Center(
@@ -516,6 +514,40 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     );
   }
 
+  Widget _buildEntityBadge(String entity) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      decoration: BoxDecoration(
+        color: const Color(0xFFEEF2FF),
+        borderRadius: BorderRadius.circular(20),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const Icon(
+            Icons.apartment_outlined,
+            size: 12,
+            color: Color(0xFF0824A0),
+          ),
+          const SizedBox(width: 4),
+          ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 90),
+            child: Text(
+              entity,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(
+                fontSize: 11,
+                fontWeight: FontWeight.w600,
+                color: Color(0xFF0824A0),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildRequestCard(NotificationItem n) {
     return Container(
       padding: const EdgeInsets.all(16),
@@ -544,14 +576,18 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                     width: 40,
                     height: 40,
                     decoration: BoxDecoration(
-                      color: const Color(0xFFEEF2FF),
+                      color: n.isExpenseRequest
+                          ? const Color(0xFFEEF2FF)
+                          : const Color(0xFFDCFCE7),
                       borderRadius: BorderRadius.circular(10),
                     ),
                     child: Icon(
                       n.isExpenseRequest
                           ? Icons.receipt_long_rounded
-                          : Icons.mail_outline_rounded,
-                      color: const Color(0xFF0824A0),
+                          : Icons.trending_up_rounded,
+                      color: n.isExpenseRequest
+                          ? const Color(0xFF0824A0)
+                          : const Color(0xFF16A34A),
                       size: 22,
                     ),
                   ),
@@ -571,39 +607,68 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                           ),
                         ),
                         const SizedBox(height: 2),
-                        Row(
+                        Wrap(
+                          spacing: 10,
+                          runSpacing: 2,
+                          crossAxisAlignment: WrapCrossAlignment.center,
                           children: [
-                            const Icon(
-                              Icons.access_time_rounded,
-                              size: 12,
-                              color: Colors.grey,
-                            ),
-                            const SizedBox(width: 4),
-                            Text(
-                              n.activityTime,
-                              style: const TextStyle(
-                                fontSize: 12,
-                                color: Colors.grey,
-                              ),
-                            ),
-                            if (n.files.isNotEmpty) ...[
-                              const SizedBox(width: 10),
-                              const Icon(
-                                Icons.attach_file_rounded,
-                                size: 12,
-                                color: Colors.grey,
-                              ),
-                              const SizedBox(width: 2),
-                              Text(
-                                n.files.length > 1
-                                    ? '${n.files.length} files'
-                                    : '1 file',
-                                style: const TextStyle(
-                                  fontSize: 12,
+                            Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                const Icon(
+                                  Icons.calendar_today_outlined,
+                                  size: 12,
                                   color: Colors.grey,
                                 ),
+                                const SizedBox(width: 4),
+                                Text(
+                                  n.activityDateId,
+                                  style: const TextStyle(
+                                    fontSize: 12,
+                                    color: Colors.grey,
+                                  ),
+                                ),
+                              ],
+                            ),
+                            Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                const Icon(
+                                  Icons.access_time_rounded,
+                                  size: 12,
+                                  color: Colors.grey,
+                                ),
+                                const SizedBox(width: 4),
+                                Text(
+                                  n.activityTimeShort,
+                                  style: const TextStyle(
+                                    fontSize: 12,
+                                    color: Colors.grey,
+                                  ),
+                                ),
+                              ],
+                            ),
+                            if (n.files.isNotEmpty)
+                              Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  const Icon(
+                                    Icons.attach_file_rounded,
+                                    size: 12,
+                                    color: Colors.grey,
+                                  ),
+                                  const SizedBox(width: 2),
+                                  Text(
+                                    n.files.length > 1
+                                        ? '${n.files.length} files'
+                                        : '1 file',
+                                    style: const TextStyle(
+                                      fontSize: 12,
+                                      color: Colors.grey,
+                                    ),
+                                  ),
+                                ],
                               ),
-                            ],
                           ],
                         ),
                       ],
@@ -623,75 +688,34 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
               const SizedBox(height: 12),
 
               Row(
+                crossAxisAlignment: CrossAxisAlignment.center,
                 children: [
                   Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
+                    child: Row(
                       children: [
-                        const Text(
-                          'Project Name',
-                          style: TextStyle(fontSize: 11, color: Colors.grey),
+                        const Icon(
+                          Icons.person_outline_rounded,
+                          size: 14,
+                          color: Color(0xFF555555),
                         ),
-                        const SizedBox(height: 4),
-                        Row(
-                          children: [
-                            const Icon(
-                              Icons.folder_outlined,
-                              size: 14,
-                              color: Color(0xFF555555),
+                        const SizedBox(width: 4),
+                        Expanded(
+                          child: Text(
+                            n.requestedBy,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w500,
+                              color: Color(0xFF222222),
                             ),
-                            const SizedBox(width: 4),
-                            Expanded(
-                              child: Text(
-                                n.projectName,
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                                style: const TextStyle(
-                                  fontSize: 12,
-                                  fontWeight: FontWeight.w500,
-                                  color: Color(0xFF222222),
-                                ),
-                              ),
-                            ),
-                          ],
+                          ),
                         ),
                       ],
                     ),
                   ),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        const Text(
-                          'Due Date',
-                          style: TextStyle(fontSize: 11, color: Colors.grey),
-                        ),
-                        const SizedBox(height: 4),
-                        Row(
-                          children: [
-                            const Icon(
-                              Icons.calendar_today_outlined,
-                              size: 14,
-                              color: Color(0xFF555555),
-                            ),
-                            const SizedBox(width: 4),
-                            Expanded(
-                              child: Text(
-                                '${n.activityDateId}, ${n.activityTime}',
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                                style: const TextStyle(
-                                  fontSize: 12,
-                                  fontWeight: FontWeight.w500,
-                                  color: Color(0xFF222222),
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ],
-                    ),
-                  ),
+                  const SizedBox(width: 8),
+                  _buildEntityBadge(n.entity),
                 ],
               ),
               const SizedBox(height: 14),

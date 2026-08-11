@@ -41,6 +41,7 @@ class ExpenseRequestItem {
   final bool canResubmit;
   final String createdAt;
   final String createdBy;
+  final ExpenseEntityRef entity;
   final String formType;
   final List<ExpenseHistoryEntry> history;
   final String invoiceDate;
@@ -55,6 +56,7 @@ class ExpenseRequestItem {
     required this.canResubmit,
     required this.createdAt,
     required this.createdBy,
+    required this.entity,
     required this.formType,
     required this.history,
     required this.invoiceDate,
@@ -88,6 +90,7 @@ class ExpenseRequestItem {
       canResubmit: json['canResubmit'] == true,
       createdAt: (json['createdAt'] ?? '-').toString(),
       createdBy: (json['createdBy'] ?? '-').toString(),
+      entity: ExpenseEntityRef.fromJson(json['entity']),
       formType: (json['formType'] ?? '-').toString(),
       history: rawHistory
           .map(

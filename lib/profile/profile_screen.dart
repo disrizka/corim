@@ -58,6 +58,11 @@ class ProfileScreen extends ConsumerWidget {
                       onTap: () => _comingSoon(context, 'Terms & Conditions'),
                     ),
                     _menuItem(
+                      icon: Icons.system_update_outlined,
+                      label: 'Check for Updates',
+                      onTap: () => _comingSoon(context, 'Check for Updates'),
+                    ),
+                    _menuItem(
                       icon: Icons.logout,
                       label: 'Log out',
                       color: Colors.red,
@@ -104,72 +109,147 @@ class ProfileScreen extends ConsumerWidget {
   ) {
     return Container(
       width: double.infinity,
-      padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
       decoration: const BoxDecoration(
+        borderRadius: BorderRadius.vertical(bottom: Radius.circular(20)),
         gradient: LinearGradient(
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
           colors: [Color(0xFF075985), Color(0xFF1B1C52)],
         ),
       ),
-      child: Column(
+      child: Stack(
         children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              IconButton(
-                onPressed: () => Navigator.maybePop(context),
-                icon: const Icon(Icons.arrow_back, color: Colors.white),
+          // Ornamen Lingkaran Transparan di Latar Belakang Kanan Atas
+          Positioned(
+            right: -30,
+            top: -30,
+            child: Container(
+              width: 140,
+              height: 140,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: Colors.white.withOpacity(0.05),
               ),
-              IconButton(
-                onPressed: () {
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (_) => const NotificationScreen(),
+            ),
+          ),
+          // Ornamen Lingkaran Transparan di Latar Belakang Kiri Bawah
+          Positioned(
+            left: -40,
+            bottom: -20,
+            child: Container(
+              width: 120,
+              height: 120,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: Colors.white.withOpacity(0.03),
+              ),
+            ),
+          ),
+
+          // Konten Utama Header
+          Column(
+            children: [
+              // Navigation Bar Top
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    IconButton(
+                      onPressed: () => Navigator.maybePop(context),
+                      icon: const Icon(Icons.arrow_back, color: Colors.white),
                     ),
-                  );
-                },
-                icon: const Icon(Icons.notifications_none, color: Colors.white),
+                    const Text(
+                      'My Profile',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 18,
+                        fontWeight: FontWeight.w700,
+                        letterSpacing: 0.5,
+                      ),
+                    ),
+                    IconButton(
+                      onPressed: () {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (_) => const NotificationScreen(),
+                          ),
+                        );
+                      },
+                      icon: const Icon(
+                        Icons.notifications_none,
+                        color: Colors.white,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 12),
+
+              // Data Profil
+              profileAsync.when(
+                data: (profile) => Padding(
+                  padding: const EdgeInsets.only(bottom: 28),
+                  child: Column(
+                    children: [
+                      Text(
+                        profile.name.isEmpty ? '-' : profile.name,
+                        textAlign: TextAlign.center,
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 22,
+                          fontWeight: FontWeight.w700,
+                          letterSpacing: 0.3,
+                        ),
+                      ),
+                      const SizedBox(height: 6),
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 14,
+                          vertical: 4,
+                        ),
+                        decoration: BoxDecoration(
+                          color: Colors.white.withOpacity(0.12),
+                          borderRadius: BorderRadius.circular(20),
+                        ),
+                        child: Text(
+                          profile.email.isEmpty ? '-' : profile.email,
+                          style: TextStyle(
+                            color: Colors.white.withOpacity(0.9),
+                            fontSize: 13,
+                            fontWeight: FontWeight.w400,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                loading: () => const Padding(
+                  padding: EdgeInsets.symmetric(vertical: 32),
+                  child: Center(
+                    child: SizedBox(
+                      width: 24,
+                      height: 24,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        color: Colors.white,
+                      ),
+                    ),
+                  ),
+                ),
+                error: (error, stack) => Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 24),
+                  child: Text(
+                    'Failed to load profile',
+                    style: TextStyle(
+                      color: Colors.white.withOpacity(0.8),
+                      fontSize: 13,
+                    ),
+                  ),
+                ),
               ),
             ],
-          ),
-          const SizedBox(height: 8),
-          profileAsync.when(
-            data: (profile) => Column(
-              children: [
-                Text(
-                  profile.name.isEmpty ? '-' : profile.name,
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 18,
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-                const SizedBox(height: 2),
-                Text(
-                  profile.email.isEmpty ? '-' : profile.email,
-                  style: const TextStyle(color: Colors.white70, fontSize: 13),
-                ),
-              ],
-            ),
-            loading: () => const SizedBox(
-              height: 44,
-              child: Center(
-                child: SizedBox(
-                  width: 20,
-                  height: 20,
-                  child: CircularProgressIndicator(
-                    strokeWidth: 2,
-                    color: Colors.white,
-                  ),
-                ),
-              ),
-            ),
-            error: (error, stack) => const Text(
-              'Failed to load profile',
-              style: TextStyle(color: Colors.white70, fontSize: 13),
-            ),
           ),
         ],
       ),
