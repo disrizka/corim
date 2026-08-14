@@ -190,6 +190,7 @@ class RequestFileTile extends StatelessWidget {
   static const _urlKeys = [
     'url',
     'path',
+    'imagePath',
     'fileUrl',
     'filePath',
     'documentUrl',
@@ -197,6 +198,7 @@ class RequestFileTile extends StatelessWidget {
     'link',
     'src',
     'file',
+    'image',
     'fileName',
     'filename',
   ];

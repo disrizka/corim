@@ -234,6 +234,201 @@ class ExpenseItemLine {
   }
 }
 
+/// A single line inside an STB settlement section (Air Ticket, Hotel
+/// Reservation, Rent Car/BBM/Toll, Tactical Funds, Meals, Coordination
+/// Funds). Not every section uses every field — e.g. Air Ticket has
+/// `detail`/`time`, while the per-day sections have `day`/`subTotal` — so
+/// this holds the union of fields and each renderer just reads what it
+/// needs.
+class ExpenseStbLine {
+  final num amount;
+  final num amountPerDay;
+  final String date;
+  final int day;
+  final String detail;
+  final String notes;
+  final num subTotal;
+  final String time;
+  final List<dynamic> uploadFile;
+
+  const ExpenseStbLine({
+    required this.amount,
+    required this.amountPerDay,
+    required this.date,
+    required this.day,
+    required this.detail,
+    required this.notes,
+    required this.subTotal,
+    required this.time,
+    required this.uploadFile,
+  });
+
+  /// The per-unit amount to display in an "Amount" column, whichever of
+  /// `amount` / `amountPerDay` the section actually populated.
+  num get displayAmount => amountPerDay != 0 ? amountPerDay : amount;
+
+  /// The line total. Sections that don't send `subTotal` (like Air Ticket)
+  /// just use `amount` directly.
+  num get displayTotal => subTotal != 0 ? subTotal : amount;
+
+  String get formattedAmount => formatRupiahExpense(displayAmount);
+  String get formattedTotal => formatRupiahExpense(displayTotal);
+
+  factory ExpenseStbLine.fromJson(Map<String, dynamic> json) {
+    num _num(dynamic v) => (v is num) ? v : num.tryParse('${v ?? ''}') ?? 0;
+    return ExpenseStbLine(
+      amount: _num(json['amount']),
+      amountPerDay: _num(json['amountPerDay']),
+      date: (json['date'] ?? '').toString(),
+      day: (json['day'] is num)
+          ? (json['day'] as num).toInt()
+          : int.tryParse('${json['day']}') ?? 0,
+      detail: (json['detail'] ?? '').toString(),
+      notes: (json['notes'] ?? '').toString(),
+      subTotal: _num(json['subTotal']),
+      time: (json['time'] ?? '').toString(),
+      uploadFile: (json['uploadFile'] is List)
+          ? json['uploadFile'] as List
+          : const [],
+    );
+  }
+}
+
+/// The "UPD" (Uang Perjalanan Dinas / per-diem) block of an STB request —
+/// a single amount-per-night entry rather than a list.
+class ExpenseStbUpd {
+  final num amount;
+  final int night;
+  final num subTotal;
+
+  const ExpenseStbUpd({
+    required this.amount,
+    required this.night,
+    required this.subTotal,
+  });
+
+  String get formattedAmount => formatRupiahExpense(amount);
+  String get formattedSubTotal => formatRupiahExpense(subTotal);
+
+  factory ExpenseStbUpd.fromJson(Map<String, dynamic> json) {
+    num _num(dynamic v) => (v is num) ? v : num.tryParse('${v ?? ''}') ?? 0;
+    return ExpenseStbUpd(
+      amount: _num(json['amount']),
+      night: (json['night'] is num)
+          ? (json['night'] as num).toInt()
+          : int.tryParse('${json['night']}') ?? 0,
+      subTotal: _num(json['subTotal']),
+    );
+  }
+}
+
+/// A single leg of the travel itinerary table (Date/Day/From/To/ETD/ETA).
+class ExpenseTravelLeg {
+  final String date;
+  final int day;
+  final String from;
+  final String to;
+  final String etd;
+  final String eta;
+
+  const ExpenseTravelLeg({
+    required this.date,
+    required this.day,
+    required this.from,
+    required this.to,
+    required this.etd,
+    required this.eta,
+  });
+
+  factory ExpenseTravelLeg.fromJson(Map<String, dynamic> json) {
+    return ExpenseTravelLeg(
+      date: (json['date'] ?? '-').toString(),
+      day: (json['day'] is num)
+          ? (json['day'] as num).toInt()
+          : int.tryParse('${json['day']}') ?? 0,
+      from: (json['from'] ?? '-').toString(),
+      to: (json['to'] ?? '-').toString(),
+      etd: (json['etd'] ?? '-').toString(),
+      eta: (json['eta'] ?? '-').toString(),
+    );
+  }
+}
+
+/// All the STB-specific (`formType == 'STB'`) sections of
+/// `detailInformation`, kept separate from the generic [ExpenseItemLine]
+/// list used by PRF/SRF/SSR.
+class ExpenseStbDetail {
+  final List<ExpenseStbLine> airTicket;
+  final List<ExpenseStbLine> coordinationFunds;
+  final List<ExpenseStbLine> hotelReservation;
+  final List<ExpenseStbLine> meals;
+  final List<ExpenseStbLine> rentCarBbmToll;
+  final List<ExpenseStbLine> tacticalFunds;
+  final num totalBudget;
+  final List<ExpenseTravelLeg> travelItinerary;
+  final ExpenseStbUpd? upd;
+
+  const ExpenseStbDetail({
+    required this.airTicket,
+    required this.coordinationFunds,
+    required this.hotelReservation,
+    required this.meals,
+    required this.rentCarBbmToll,
+    required this.tacticalFunds,
+    required this.totalBudget,
+    required this.travelItinerary,
+    required this.upd,
+  });
+
+  bool get isEmpty =>
+      airTicket.isEmpty &&
+      coordinationFunds.isEmpty &&
+      hotelReservation.isEmpty &&
+      meals.isEmpty &&
+      rentCarBbmToll.isEmpty &&
+      tacticalFunds.isEmpty &&
+      upd == null;
+
+  factory ExpenseStbDetail.fromJson(Map<String, dynamic> json) {
+    List<ExpenseStbLine> _lines(String key) {
+      final raw = json[key];
+      if (raw is! List) return const [];
+      return raw
+          .map(
+            (e) => ExpenseStbLine.fromJson(Map<String, dynamic>.from(e as Map)),
+          )
+          .toList();
+    }
+
+    final rawUpd = json['upd'];
+    final rawTravel = json['travelItinerary'];
+
+    return ExpenseStbDetail(
+      airTicket: _lines('airTicket'),
+      coordinationFunds: _lines('coordinationFunds'),
+      hotelReservation: _lines('hotelReservation'),
+      meals: _lines('meals'),
+      rentCarBbmToll: _lines('rentCarBbmToll'),
+      tacticalFunds: _lines('tacticalFunds'),
+      totalBudget: (json['totalBudget'] is num)
+          ? json['totalBudget'] as num
+          : num.tryParse('${json['totalBudget']}') ?? 0,
+      travelItinerary: (rawTravel is List)
+          ? rawTravel
+                .map(
+                  (e) => ExpenseTravelLeg.fromJson(
+                    Map<String, dynamic>.from(e as Map),
+                  ),
+                )
+                .toList()
+          : const [],
+      upd: (rawUpd is Map)
+          ? ExpenseStbUpd.fromJson(Map<String, dynamic>.from(rawUpd))
+          : null,
+    );
+  }
+}
+
 class ExpensePhase {
   final String actionAt;
   final String actionBy;
@@ -300,6 +495,10 @@ class ExpenseRequestDetail {
   final String status;
   final String updatedAt;
   final List<dynamic> uploadFile;
+  final ExpenseStbDetail? stb;
+  final String travelStartDate;
+  final String travelEndDate;
+  final String reasonForTravel;
 
   const ExpenseRequestDetail({
     required this.id,
@@ -326,7 +525,20 @@ class ExpenseRequestDetail {
     required this.status,
     required this.updatedAt,
     required this.uploadFile,
+    this.stb,
+    this.travelStartDate = '',
+    this.travelEndDate = '',
+    this.reasonForTravel = '',
   });
+
+  /// True when there's a travel itinerary worth showing (dates and/or a
+  /// reason were sent), independent of form type — STB always has this,
+  /// but other forms could too.
+  bool get hasTravelItinerary =>
+      travelStartDate.trim().isNotEmpty ||
+      travelEndDate.trim().isNotEmpty ||
+      reasonForTravel.trim().isNotEmpty ||
+      (stb?.travelItinerary.isNotEmpty ?? false);
 
   bool get isPending => status.toUpperCase() == 'PENDING';
   bool get isApproved => status.toUpperCase() == 'APPROVED';
@@ -373,6 +585,15 @@ class ExpenseRequestDetail {
         ? Map<String, dynamic>.from(json['createdByUser'] as Map)
         : <String, dynamic>{};
 
+    final rawDurationTravel = (json['durationTravel'] is Map)
+        ? Map<String, dynamic>.from(json['durationTravel'] as Map)
+        : <String, dynamic>{};
+
+    final formType = (json['formType'] ?? '-').toString();
+    final stb = (formType.toUpperCase() == 'STB')
+        ? ExpenseStbDetail.fromJson(detailInformation)
+        : null;
+
     return ExpenseRequestDetail(
       id: (json['id'] ?? '').toString(),
       amount: (json['amount'] is num)
@@ -384,6 +605,10 @@ class ExpenseRequestDetail {
       createdBy: (json['createdBy'] ?? '-').toString(),
       createdByEmail: (createdByUser['email'] ?? '-').toString(),
       currentPhase: (json['currentPhase'] ?? '-').toString(),
+      stb: stb,
+      travelStartDate: (rawDurationTravel['startDate'] ?? '').toString(),
+      travelEndDate: (rawDurationTravel['endDate'] ?? '').toString(),
+      reasonForTravel: (json['reasonForTravel'] ?? '').toString(),
       items: rawItems
           .map(
             (e) =>
@@ -394,7 +619,7 @@ class ExpenseRequestDetail {
       evidenceFile: (json['evidenceFile'] is List)
           ? json['evidenceFile'] as List
           : const [],
-      formType: (json['formType'] ?? '-').toString(),
+      formType: formType,
       history: rawHistory
           .map(
             (e) => ExpenseHistoryEntry.fromJson(

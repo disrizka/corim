@@ -244,9 +244,12 @@ class _ExpenseRequestDetailScreenState
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            d.isSettlementForm
-                ? _buildSettlementItemsCard(d)
-                : _buildStandardItemsCard(d),
+            if (d.isSettlementForm && d.stb != null && !d.stb!.isEmpty)
+              _buildStbSections(d.stb!)
+            else if (d.isSettlementForm)
+              _buildSettlementItemsCard(d)
+            else
+              _buildStandardItemsCard(d),
             const SizedBox(height: 16),
             _buildFilesSection(d),
           ],
@@ -287,6 +290,82 @@ class _ExpenseRequestDetailScreenState
             for (final item in d.items) _ItemTile(item: item),
         ],
       ),
+    );
+  }
+
+  /// STB: rendered as separate sections matching how the web dashboard
+  /// shows it — Air Ticket, Hotel Reservation, Rent Car/BBM/Toll, Tactical
+  /// Funds & Meals (combined), Coordination Funds, and UPD — each only
+  /// shown when the backend actually sent lines for it.
+  Widget _buildStbSections(ExpenseStbDetail stb) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        if (stb.airTicket.isNotEmpty) ...[
+          _StbAirTicketCard(lines: stb.airTicket),
+          const SizedBox(height: 12),
+        ],
+        if (stb.hotelReservation.isNotEmpty) ...[
+          _StbDayCard(title: 'HOTEL RESERVATION', lines: stb.hotelReservation),
+          const SizedBox(height: 12),
+        ],
+        if (stb.rentCarBbmToll.isNotEmpty) ...[
+          _StbDayCard(title: 'RENT CAR, BBM & TOLL', lines: stb.rentCarBbmToll),
+          const SizedBox(height: 12),
+        ],
+        if (stb.tacticalFunds.isNotEmpty || stb.meals.isNotEmpty) ...[
+          _StbLabeledDayCard(
+            title: 'TACTICAL FUNDS & MEALS',
+            groups: [
+              if (stb.tacticalFunds.isNotEmpty)
+                ('Tactical Funds', stb.tacticalFunds),
+              if (stb.meals.isNotEmpty) ('Meals', stb.meals),
+            ],
+          ),
+          const SizedBox(height: 12),
+        ],
+        if (stb.coordinationFunds.isNotEmpty) ...[
+          _StbDayCard(
+            title: 'COORDINATION FUNDS',
+            lines: stb.coordinationFunds,
+          ),
+          const SizedBox(height: 12),
+        ],
+        if (stb.upd != null) ...[
+          _StbUpdCard(upd: stb.upd!),
+          const SizedBox(height: 12),
+        ],
+        if (stb.totalBudget != 0)
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+            decoration: BoxDecoration(
+              gradient: NotifColors.brandGradient,
+              borderRadius: BorderRadius.circular(14),
+            ),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                const Text(
+                  'Total Budget',
+                  style: TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                    color: Colors.white,
+                  ),
+                ),
+                Text(
+                  formatRupiahExpense(stb.totalBudget),
+                  style: const TextStyle(
+                    fontSize: 15,
+                    fontWeight: FontWeight.w800,
+                    color: Colors.white,
+                  ),
+                ),
+              ],
+            ),
+          ),
+      ],
     );
   }
 
@@ -401,6 +480,10 @@ class _ExpenseRequestDetailScreenState
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           _buildDetailInformationCard(context, d),
+          if (d.hasTravelItinerary) ...[
+            const SizedBox(height: 16),
+            _buildTravelItineraryCard(d),
+          ],
           if (phases.isNotEmpty) ...[
             const SizedBox(height: 16),
             _buildPhaseCard(phases),
@@ -510,6 +593,59 @@ class _ExpenseRequestDetailScreenState
               label: 'Revision:',
               value: '${d.revisionCount}x',
             ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildTravelItineraryCard(ExpenseRequestDetail d) {
+    final legs = d.stb?.travelItinerary ?? const <ExpenseTravelLeg>[];
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: NotifColors.cardBorder),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            'TRAVEL ITINERARY',
+            style: TextStyle(
+              fontSize: 11,
+              fontWeight: FontWeight.w700,
+              letterSpacing: 0.6,
+              color: Colors.grey,
+            ),
+          ),
+          const SizedBox(height: 8),
+          if (d.travelStartDate.trim().isNotEmpty ||
+              d.travelEndDate.trim().isNotEmpty)
+            RequestInfoRow(
+              icon: Icons.date_range_outlined,
+              label: 'Duration Travel:',
+              value:
+                  '${d.travelStartDate.isEmpty ? '-' : d.travelStartDate} — '
+                  '${d.travelEndDate.isEmpty ? '-' : d.travelEndDate}',
+            ),
+          if (d.reasonForTravel.trim().isNotEmpty)
+            RequestInfoRow(
+              icon: Icons.flag_outlined,
+              label: 'Reason for Travel:',
+              value: d.reasonForTravel,
+            ),
+          if (legs.isNotEmpty) ...[
+            const SizedBox(height: 10),
+            const Divider(height: 1, color: NotifColors.divider),
+            const SizedBox(height: 10),
+            for (var i = 0; i < legs.length; i++) ...[
+              _TravelLegRow(leg: legs[i]),
+              if (i != legs.length - 1)
+                const Divider(height: 14, color: NotifColors.divider),
+            ],
+          ],
         ],
       ),
     );
@@ -718,6 +854,54 @@ class _PhaseTile extends StatelessWidget {
   }
 }
 
+class _TravelLegRow extends StatelessWidget {
+  final ExpenseTravelLeg leg;
+
+  const _TravelLegRow({required this.leg});
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Icon(Icons.circle, size: 6, color: Colors.grey.shade400),
+            const SizedBox(width: 6),
+            Text(
+              '${leg.date} · Day ${leg.day}',
+              style: TextStyle(
+                fontSize: 11.5,
+                fontWeight: FontWeight.w600,
+                color: Colors.grey.shade600,
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 4),
+        Row(
+          children: [
+            Expanded(
+              child: Text(
+                '${leg.from}  →  ${leg.to}',
+                style: const TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w600,
+                  color: Color(0xFF1A1A2E),
+                ),
+              ),
+            ),
+            Text(
+              'ETD ${leg.etd}  ·  ETA ${leg.eta}',
+              style: TextStyle(fontSize: 11.5, color: Colors.grey.shade600),
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+}
+
 class _HistoryTile extends StatelessWidget {
   final ExpenseHistoryEntry entry;
   final bool isLast;
@@ -907,6 +1091,315 @@ class _ItemStat extends StatelessWidget {
           ),
         ),
       ],
+    );
+  }
+}
+
+/// Shared white/bordered card shell used by all STB sections, matching the
+/// look of [_buildStandardItemsCard] / [_buildDetailInformationCard].
+class _StbCardShell extends StatelessWidget {
+  final String title;
+  final Widget child;
+
+  const _StbCardShell({required this.title, required this.child});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: NotifColors.cardBorder),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            title,
+            style: const TextStyle(
+              fontSize: 11,
+              fontWeight: FontWeight.w700,
+              letterSpacing: 0.6,
+              color: Colors.grey,
+            ),
+          ),
+          const SizedBox(height: 10),
+          child,
+        ],
+      ),
+    );
+  }
+}
+
+/// AIR TICKET section: detail / date / time / amount, with a per-line file
+/// link when the backend attached one.
+class _StbAirTicketCard extends StatelessWidget {
+  final List<ExpenseStbLine> lines;
+
+  const _StbAirTicketCard({required this.lines});
+
+  @override
+  Widget build(BuildContext context) {
+    return _StbCardShell(
+      title: 'AIR TICKET',
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          for (final line in lines) ...[
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Expanded(
+                  flex: 3,
+                  child: Text(
+                    line.detail.isEmpty ? '-' : line.detail,
+                    style: const TextStyle(
+                      fontSize: 12.5,
+                      fontWeight: FontWeight.w600,
+                      color: Color(0xFF1A1A2E),
+                    ),
+                  ),
+                ),
+                Expanded(
+                  flex: 2,
+                  child: Text(
+                    line.date.isEmpty ? '-' : line.date,
+                    style: TextStyle(fontSize: 12, color: Colors.grey.shade700),
+                  ),
+                ),
+                Expanded(
+                  flex: 1,
+                  child: Text(
+                    line.time.isEmpty ? '-' : line.time,
+                    style: TextStyle(fontSize: 12, color: Colors.grey.shade700),
+                  ),
+                ),
+                Expanded(
+                  flex: 2,
+                  child: Text(
+                    line.formattedAmount,
+                    textAlign: TextAlign.right,
+                    style: const TextStyle(
+                      fontSize: 12.5,
+                      fontWeight: FontWeight.w700,
+                      color: Color(0xFF075985),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            if (line.uploadFile.isNotEmpty)
+              Padding(
+                padding: const EdgeInsets.only(top: 4),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    for (final f in line.uploadFile) RequestFileTile(file: f),
+                  ],
+                ),
+              ),
+            if (line != lines.last)
+              const Divider(height: 16, color: NotifColors.divider),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+/// HOTEL RESERVATION / RENT CAR-BBM-TOLL / COORDINATION FUNDS: date / day /
+/// amount-per-day / sub total.
+class _StbDayCard extends StatelessWidget {
+  final String title;
+  final List<ExpenseStbLine> lines;
+
+  const _StbDayCard({required this.title, required this.lines});
+
+  @override
+  Widget build(BuildContext context) {
+    return _StbCardShell(
+      title: title,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          for (final line in lines) ...[
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Expanded(
+                  flex: 2,
+                  child: Text(
+                    line.date.isEmpty ? '-' : line.date,
+                    style: const TextStyle(
+                      fontSize: 12.5,
+                      color: Color(0xFF1A1A2E),
+                    ),
+                  ),
+                ),
+                Expanded(
+                  flex: 1,
+                  child: Text(
+                    '${line.day} day',
+                    style: TextStyle(fontSize: 12, color: Colors.grey.shade700),
+                  ),
+                ),
+                Expanded(
+                  flex: 2,
+                  child: Text(
+                    line.formattedAmount,
+                    style: TextStyle(fontSize: 12, color: Colors.grey.shade700),
+                  ),
+                ),
+                Expanded(
+                  flex: 2,
+                  child: Text(
+                    line.formattedTotal,
+                    textAlign: TextAlign.right,
+                    style: const TextStyle(
+                      fontSize: 12.5,
+                      fontWeight: FontWeight.w700,
+                      color: Color(0xFF075985),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            if (line.uploadFile.isNotEmpty)
+              Padding(
+                padding: const EdgeInsets.only(top: 4),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    for (final f in line.uploadFile) RequestFileTile(file: f),
+                  ],
+                ),
+              ),
+            if (line != lines.last)
+              const Divider(height: 16, color: NotifColors.divider),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+/// TACTICAL FUNDS & MEALS: same layout as [_StbDayCard] but combining two
+/// labeled groups (e.g. "Tactical Funds" rows then "Meals" rows) under one
+/// card, matching the web dashboard.
+class _StbLabeledDayCard extends StatelessWidget {
+  final String title;
+  final List<(String, List<ExpenseStbLine>)> groups;
+
+  const _StbLabeledDayCard({required this.title, required this.groups});
+
+  @override
+  Widget build(BuildContext context) {
+    return _StbCardShell(
+      title: title,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          for (final group in groups)
+            for (final line in group.$2)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 10),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Expanded(
+                      flex: 3,
+                      child: Text(
+                        group.$1,
+                        style: const TextStyle(
+                          fontSize: 12.5,
+                          fontWeight: FontWeight.w600,
+                          color: Color(0xFF1A1A2E),
+                        ),
+                      ),
+                    ),
+                    Expanded(
+                      flex: 2,
+                      child: Text(
+                        line.formattedAmount,
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: Colors.grey.shade700,
+                        ),
+                      ),
+                    ),
+                    Expanded(
+                      flex: 1,
+                      child: Text(
+                        '${line.day}',
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: Colors.grey.shade700,
+                        ),
+                      ),
+                    ),
+                    Expanded(
+                      flex: 2,
+                      child: Text(
+                        line.formattedTotal,
+                        textAlign: TextAlign.right,
+                        style: const TextStyle(
+                          fontSize: 12.5,
+                          fontWeight: FontWeight.w700,
+                          color: Color(0xFF075985),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+        ],
+      ),
+    );
+  }
+}
+
+/// UPD: a single amount / night / sub total row.
+class _StbUpdCard extends StatelessWidget {
+  final ExpenseStbUpd upd;
+
+  const _StbUpdCard({required this.upd});
+
+  @override
+  Widget build(BuildContext context) {
+    return _StbCardShell(
+      title: 'UPD',
+      child: Row(
+        children: [
+          Expanded(
+            flex: 2,
+            child: Text(
+              upd.formattedAmount,
+              style: const TextStyle(fontSize: 12.5, color: Color(0xFF1A1A2E)),
+            ),
+          ),
+          Expanded(
+            flex: 1,
+            child: Text(
+              '${upd.night} night',
+              style: TextStyle(fontSize: 12, color: Colors.grey.shade700),
+            ),
+          ),
+          Expanded(
+            flex: 2,
+            child: Text(
+              upd.formattedSubTotal,
+              textAlign: TextAlign.right,
+              style: const TextStyle(
+                fontSize: 12.5,
+                fontWeight: FontWeight.w700,
+                color: Color(0xFF075985),
+              ),
+            ),
+          ),
+        ],
+      ),
     );
   }
 }
