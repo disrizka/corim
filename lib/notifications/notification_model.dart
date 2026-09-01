@@ -18,6 +18,7 @@ class NotificationItem {
   final String? note;
   final String entity;
   final String clientName;
+  final bool canApprove;
 
   const NotificationItem({
     required this.id,
@@ -37,6 +38,7 @@ class NotificationItem {
     this.note,
     this.entity = '-',
     this.clientName = '-',
+    this.canApprove = true,
   });
 
   bool get isPending => approvalStatus.toUpperCase() == 'PENDING';
@@ -101,6 +103,7 @@ class NotificationItem {
       note: note ?? this.note,
       entity: entity,
       clientName: clientName,
+      canApprove: canApprove,
     );
   }
 
@@ -125,6 +128,27 @@ class NotificationItem {
       note: json['note']?.toString(),
       entity: (json['entity'] ?? '-').toString(),
       clientName: (json['clientName'] ?? '-').toString(),
+      // Whether the *current* logged-in user is allowed to approve/reject
+      // this item — not just view it. No permission field from the backend
+      // yet defaults to `false` (safe default: hide the buttons from
+      // everyone rather than show them to unauthorized users). Once the
+      // backend sends one of these keys, only the real approver will see
+      // Approve/Reject.
+      canApprove: _notifCanApproveOf(json),
     );
   }
+}
+
+bool _notifCanApproveOf(Map<String, dynamic> json) {
+  final raw =
+      json['canApprove'] ??
+      json['canAction'] ??
+      json['isApprover'] ??
+      json['canReview'];
+  // Same reasoning as the expense model: default to `true` until the
+  // backend sends a real permission field, so Approve/Reject keeps
+  // working for the intended approver. The action endpoint is expected to
+  // reject unauthorized approve/reject attempts server-side either way.
+  if (raw == null) return true;
+  return raw == true;
 }

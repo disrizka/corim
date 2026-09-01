@@ -49,6 +49,46 @@ String expenseTimeOf(String raw) {
   return '$hh:$mm';
 }
 
+const List<String> _expenseMonthNames = [
+  'January',
+  'February',
+  'March',
+  'April',
+  'May',
+  'June',
+  'July',
+  'August',
+  'September',
+  'October',
+  'November',
+  'December',
+];
+
+/// Formats any parseable timestamp ("YYYY-MM-DD HH:mm:ss", ISO-8601, etc.)
+/// into a readable "1 January 2025, 15:00" form — always without seconds.
+/// Falls back to the raw string (with any trailing ":ss" stripped) when it
+/// can't be parsed, so history/phase timestamps never show raw seconds.
+String expenseFormatDateTime(String raw) {
+  final trimmed = raw.trim();
+  if (trimmed.isEmpty || trimmed == '-') return trimmed;
+
+  final dt = DateTime.tryParse(trimmed);
+  if (dt != null) {
+    final local = dt.toLocal();
+    final hh = local.hour.toString().padLeft(2, '0');
+    final mm = local.minute.toString().padLeft(2, '0');
+    return '${local.day} ${_expenseMonthNames[local.month - 1]} '
+        '${local.year}, $hh:$mm';
+  }
+
+  // Couldn't parse (e.g. already backend-formatted) — just drop a trailing
+  // ":ss" seconds component if there is one, so it's still readable.
+  return trimmed.replaceFirstMapped(
+    RegExp(r'(\d{1,2}:\d{2}):\d{2}'),
+    (m) => m.group(1)!,
+  );
+}
+
 class ExpenseRequestItem {
   final String id;
   final num amount;
@@ -470,6 +510,23 @@ class ExpensePhase {
   }
 }
 
+bool _expenseCanApproveOf(Map<String, dynamic> json) {
+  final raw =
+      json['canApprove'] ??
+      json['canAction'] ??
+      json['isApprover'] ??
+      json['canReview'];
+  // No permission field from the backend yet → default to `true` so
+  // Approve/Reject keeps working for the user it's actually meant for.
+  // The backend already rejects unauthorized approve/reject attempts at
+  // the action endpoint (business-rule validation), so this default does
+  // not weaken security — it only affects whether the button is *shown*.
+  // As soon as the backend sends one of the keys above, only the real
+  // approver will see the button; everyone else keeps read-only access.
+  if (raw == null) return true;
+  return raw == true;
+}
+
 class ExpenseRequestDetail {
   final String id;
   final num amount;
@@ -499,6 +556,7 @@ class ExpenseRequestDetail {
   final String travelStartDate;
   final String travelEndDate;
   final String reasonForTravel;
+  final bool canApprove;
 
   const ExpenseRequestDetail({
     required this.id,
@@ -529,6 +587,7 @@ class ExpenseRequestDetail {
     this.travelStartDate = '',
     this.travelEndDate = '',
     this.reasonForTravel = '',
+    this.canApprove = true,
   });
 
   /// True when there's a travel itinerary worth showing (dates and/or a
@@ -646,6 +705,14 @@ class ExpenseRequestDetail {
       uploadFile: (json['uploadFile'] is List)
           ? json['uploadFile'] as List
           : const [],
+      // Whether the *current* logged-in user is allowed to approve/reject
+      // this request (as opposed to merely being allowed to view it).
+      // The backend should send this alongside the detail payload (any of
+      // the keys below); until it does, this defaults to `true` so nothing
+      // regresses — but as soon as the backend adds a real permission flag,
+      // the Approve/Reject bar will automatically only show for users who
+      // are actually allowed to act on it.
+      canApprove: _expenseCanApproveOf(json),
     );
   }
 }

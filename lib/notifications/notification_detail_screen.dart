@@ -352,7 +352,7 @@ class _NotificationDetailScreenState
           ],
 
           const SizedBox(height: 20),
-          if (n.isPending) ...[
+          if (n.isPending && n.canApprove) ...[
             RequestNoteField(controller: _noteController, enabled: true),
             const SizedBox(height: 18),
             RequestApprovalButtons(

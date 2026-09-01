@@ -534,7 +534,7 @@ class _NotificationCardState extends ConsumerState<_NotificationCard> {
                         ),
                 ),
 
-                if (n.isPending) ...[
+                if (n.isPending && n.canApprove) ...[
                   const SizedBox(height: 14),
                   const Divider(height: 1, color: NotifColors.divider),
                   const SizedBox(height: 14),

@@ -60,11 +60,11 @@ class _ExpenseRequestDetailScreenState
     );
   }
 
-  Future<void> _submit(bool approve) async {
+  Future<void> _submit(bool approve, {String note = ''}) async {
     setState(() => _isSubmitting = true);
     final result = await ref
         .read(expenseRequestDetailProvider(widget.expenseId).notifier)
-        .sendAction(approve: approve, note: _noteController.text.trim());
+        .sendAction(approve: approve, note: note.trim());
     if (!mounted) return;
     setState(() => _isSubmitting = false);
 
@@ -87,6 +87,143 @@ class _ExpenseRequestDetailScreenState
         ),
       ),
     );
+  }
+
+  /// Approve/Reject always goes through a confirmation modal first, with
+  /// the note field living inside that modal (not sitting permanently on
+  /// screen). Confirming here closes the modal and fires the actual
+  /// request; the floating bar's buttons show the loading/disabled state
+  /// while it's in flight.
+  Future<void> _confirmAndSubmit(bool approve) async {
+    final noteController = TextEditingController();
+    final confirmed = await showDialog<bool>(
+      context: context,
+      barrierDismissible: true,
+      builder: (ctx) => Dialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(20, 24, 20, 20),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Container(
+                    width: 44,
+                    height: 44,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: approve
+                          ? const Color(0xFFE0F2FE)
+                          : const Color(0xFFFEE2E2),
+                    ),
+                    child: Icon(
+                      approve
+                          ? Icons.assignment_turned_in_rounded
+                          : Icons.cancel_rounded,
+                      color: approve
+                          ? const Color(0xFF075985)
+                          : const Color(0xFFB91C1C),
+                      size: 22,
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Text(
+                      approve ? 'Approve Request' : 'Reject Request',
+                      style: const TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w700,
+                        color: Color(0xFF1A1A2E),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 14),
+              Text(
+                'Are you sure you want to ${approve ? 'approve' : 'reject'} '
+                'this request? This action cannot be undone.',
+                style: TextStyle(fontSize: 13, color: Colors.grey.shade600),
+              ),
+              const SizedBox(height: 16),
+              Text(
+                'Add a note (optional):',
+                style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
+              ),
+              const SizedBox(height: 4),
+              RequestNoteField(controller: noteController, enabled: true),
+              const SizedBox(height: 18),
+              Row(
+                children: [
+                  Expanded(
+                    child: SizedBox(
+                      height: 44,
+                      child: OutlinedButton(
+                        onPressed: () => Navigator.of(ctx).pop(false),
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: Colors.grey.shade700,
+                          side: BorderSide(color: Colors.grey.shade300),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                        ),
+                        child: const Text(
+                          'Cancel',
+                          style: TextStyle(fontWeight: FontWeight.w600),
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: SizedBox(
+                      height: 44,
+                      child: DecoratedBox(
+                        decoration: BoxDecoration(
+                          color: approve ? null : const Color(0xFFB91C1C),
+                          gradient: approve
+                              ? const LinearGradient(
+                                  colors: [
+                                    Color(0xFF1B1C52),
+                                    Color(0xFF075985),
+                                  ],
+                                )
+                              : null,
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        child: ElevatedButton(
+                          onPressed: () => Navigator.of(ctx).pop(true),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: Colors.transparent,
+                            foregroundColor: Colors.white,
+                            shadowColor: Colors.transparent,
+                            elevation: 0,
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(10),
+                            ),
+                          ),
+                          child: Text(
+                            approve ? 'Approve' : 'Reject',
+                            style: const TextStyle(fontWeight: FontWeight.w600),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+
+    final note = noteController.text;
+    noteController.dispose();
+    if (confirmed != true || !mounted) return;
+    await _submit(approve, note: note);
   }
 
   @override
@@ -150,9 +287,26 @@ class _ExpenseRequestDetailScreenState
   ) {
     return Column(
       children: [
-        Padding(
-          padding: const EdgeInsets.fromLTRB(20, 12, 20, 16),
-          child: _buildHeaderCard(d),
+        ConstrainedBox(
+          // Bounded so a long Detail Information / Travel Itinerary pair
+          // (many travel legs, long client/project names, etc.) scrolls on
+          // its own instead of squeezing the tabs below off screen.
+          constraints: BoxConstraints(
+            maxHeight: MediaQuery.of(context).size.height * 0.42,
+          ),
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.fromLTRB(20, 12, 20, 16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                _buildDetailInformationCard(context, d),
+                if (d.hasTravelItinerary) ...[
+                  const SizedBox(height: 12),
+                  _buildTravelItineraryCard(d),
+                ],
+              ],
+            ),
+          ),
         ),
         Container(
           color: Colors.white,
@@ -166,7 +320,7 @@ class _ExpenseRequestDetailScreenState
               fontWeight: FontWeight.w600,
             ),
             tabs: const [
-              Tab(text: 'Items'),
+              Tab(text: 'Detail Item'),
               Tab(text: 'Status'),
               Tab(text: 'History'),
             ],
@@ -184,43 +338,6 @@ class _ExpenseRequestDetailScreenState
           ),
         ),
       ],
-    );
-  }
-
-  // ---------------------------------------------------------------------
-  // Header (always visible above the tabs)
-  // ---------------------------------------------------------------------
-
-  Widget _buildHeaderCard(ExpenseRequestDetail d) {
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        gradient: NotifColors.brandGradient,
-        borderRadius: BorderRadius.circular(16),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            d.requestNumber,
-            style: const TextStyle(
-              fontSize: 18,
-              fontWeight: FontWeight.w700,
-              color: Colors.white,
-            ),
-          ),
-          const SizedBox(height: 4),
-          Text(
-            d.formattedAmount,
-            style: const TextStyle(
-              fontSize: 24,
-              fontWeight: FontWeight.w800,
-              color: Colors.white,
-            ),
-          ),
-        ],
-      ),
     );
   }
 
@@ -469,9 +586,35 @@ class _ExpenseRequestDetailScreenState
   // Tab 2: Status (request info, status badge/banner, approval phases)
   // ---------------------------------------------------------------------
 
+  /// Status tab now only holds the phase-of-request timeline (Detail
+  /// Information and Travel Itinerary live above the tabs instead, since
+  /// they're relevant regardless of which tab is open).
   Widget _buildStatusTab(BuildContext context, ExpenseRequestDetail d) {
     final phases = [...d.phaseOfRequest]
       ..sort((a, b) => a.phaseOrder.compareTo(b.phaseOrder));
+
+    if (phases.isEmpty && (d.notes.trim().isEmpty || d.notes.trim() == '-')) {
+      return Center(
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(
+                Icons.timelapse_rounded,
+                size: 36,
+                color: Colors.grey.shade400,
+              ),
+              const SizedBox(height: 10),
+              Text(
+                'No phase information yet',
+                style: TextStyle(fontSize: 13, color: Colors.grey.shade500),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
 
     return SingleChildScrollView(
       physics: const AlwaysScrollableScrollPhysics(),
@@ -479,15 +622,7 @@ class _ExpenseRequestDetailScreenState
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          _buildDetailInformationCard(context, d),
-          if (d.hasTravelItinerary) ...[
-            const SizedBox(height: 16),
-            _buildTravelItineraryCard(d),
-          ],
-          if (phases.isNotEmpty) ...[
-            const SizedBox(height: 16),
-            _buildPhaseCard(phases),
-          ],
+          if (phases.isNotEmpty) _buildPhaseCard(phases),
           if (d.notes.trim().isNotEmpty && d.notes.trim() != '-') ...[
             const SizedBox(height: 16),
             Text(
@@ -537,16 +672,32 @@ class _ExpenseRequestDetailScreenState
               color: Colors.grey,
             ),
           ),
-          const SizedBox(height: 8),
+          const SizedBox(height: 10),
+          Row(
+            children: [
+              _InfoPill(
+                label: d.entity.code,
+                background: const Color(0xFFDCFCE7),
+                foreground: const Color(0xFF15803D),
+              ),
+              const SizedBox(width: 8),
+              _InfoPill(
+                label: expenseFormTypeLabel(d.formType),
+                background: const Color(0xFFDBEAFE),
+                foreground: const Color(0xFF1D4ED8),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
           RequestInfoRow(
             icon: Icons.calendar_today_outlined,
             label: 'Request Date:',
             value: d.requestDateWithTime,
           ),
           RequestInfoRow(
-            icon: Icons.description_outlined,
-            label: 'Form Type:',
-            value: expenseFormTypeLabel(d.formType),
+            icon: Icons.receipt_long_outlined,
+            label: 'Request No:',
+            value: d.requestNumber,
           ),
           if (d.operationExpense.trim().isNotEmpty && d.operationExpense != '-')
             RequestInfoRow(
@@ -593,6 +744,19 @@ class _ExpenseRequestDetailScreenState
               label: 'Revision:',
               value: '${d.revisionCount}x',
             ),
+          const Divider(height: 22, color: NotifColors.divider),
+          RequestInfoWidgetRow(
+            icon: Icons.payments_outlined,
+            label: 'Amount:',
+            trailing: Text(
+              d.formattedAmount,
+              style: const TextStyle(
+                fontSize: 15,
+                fontWeight: FontWeight.w800,
+                color: Color(0xFF075985),
+              ),
+            ),
+          ),
         ],
       ),
     );
@@ -718,8 +882,21 @@ class _ExpenseRequestDetailScreenState
             _HistoryTile(
               entry: d.history[i],
               isLast: i == d.history.length - 1,
+              onTap: () => _openHistoryEntry(context, d.history[i]),
             ),
         ],
+      ),
+    );
+  }
+
+  /// Opens the detail screen for a history/revision entry so the user can
+  /// see its full breakdown, not just the summary shown in the tile.
+  void _openHistoryEntry(BuildContext context, ExpenseHistoryEntry entry) {
+    if (entry.id.trim().isEmpty || entry.id == widget.expenseId) return;
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => ExpenseRequestDetailScreen(expenseId: entry.id),
       ),
     );
   }
@@ -729,7 +906,11 @@ class _ExpenseRequestDetailScreenState
   // ---------------------------------------------------------------------
 
   Widget? _buildFloatingApprovalBar(ExpenseRequestDetail d) {
-    if (!d.isPending) return null;
+    // Only pending requests can be actioned at all, and only by users the
+    // backend says are allowed to approve/reject this one — everyone else
+    // can still open and read the request, they just won't see these
+    // buttons.
+    if (!d.isPending || !d.canApprove) return null;
 
     return Container(
       padding: EdgeInsets.fromLTRB(
@@ -749,24 +930,44 @@ class _ExpenseRequestDetailScreenState
           ),
         ],
       ),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            'Add a note (optional):',
-            style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
-          ),
-          const SizedBox(height: 4),
-          RequestNoteField(controller: _noteController, enabled: true),
-          const SizedBox(height: 12),
-          RequestApprovalButtons(
-            isSubmitting: _isSubmitting,
-            enabled: true,
-            onReject: () => _submit(false),
-            onApprove: () => _submit(true),
-          ),
-        ],
+      child: RequestApprovalButtons(
+        isSubmitting: _isSubmitting,
+        enabled: true,
+        onReject: () => _confirmAndSubmit(false),
+        onApprove: () => _confirmAndSubmit(true),
+      ),
+    );
+  }
+}
+
+/// Small rounded status/category pill, e.g. entity code or form type,
+/// shown at the top of the Detail Information card.
+class _InfoPill extends StatelessWidget {
+  final String label;
+  final Color background;
+  final Color foreground;
+
+  const _InfoPill({
+    required this.label,
+    required this.background,
+    required this.foreground,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
+      decoration: BoxDecoration(
+        color: background,
+        borderRadius: BorderRadius.circular(999),
+      ),
+      child: Text(
+        label,
+        style: TextStyle(
+          fontSize: 12,
+          fontWeight: FontWeight.w700,
+          color: foreground,
+        ),
       ),
     );
   }
@@ -820,7 +1021,9 @@ class _PhaseTile extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    phase.actionAt.trim().isEmpty ? '-' : phase.actionAt,
+                    phase.actionAt.trim().isEmpty
+                        ? '-'
+                        : expenseFormatDateTime(phase.actionAt),
                     style: TextStyle(fontSize: 11, color: Colors.grey.shade500),
                   ),
                   const SizedBox(height: 2),
@@ -905,8 +1108,11 @@ class _TravelLegRow extends StatelessWidget {
 class _HistoryTile extends StatelessWidget {
   final ExpenseHistoryEntry entry;
   final bool isLast;
+  final VoidCallback? onTap;
 
-  const _HistoryTile({required this.entry, required this.isLast});
+  const _HistoryTile({required this.entry, required this.isLast, this.onTap});
+
+  bool get _isTappable => onTap != null && entry.id.trim().isNotEmpty;
 
   @override
   Widget build(BuildContext context) {
@@ -939,63 +1145,75 @@ class _HistoryTile extends StatelessWidget {
           Expanded(
             child: Padding(
               padding: const EdgeInsets.only(bottom: 16),
-              child: Container(
-                width: double.infinity,
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: const Color(0xFFF8F9FC),
+              child: Material(
+                color: const Color(0xFFF8F9FC),
+                borderRadius: BorderRadius.circular(10),
+                child: InkWell(
+                  onTap: _isTappable ? onTap : null,
                   borderRadius: BorderRadius.circular(10),
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  child: Padding(
+                    padding: const EdgeInsets.all(12),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Expanded(
-                          child: Text(
-                            entry.formNumber,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(
-                              fontSize: 13,
-                              fontWeight: FontWeight.w700,
-                              color: Color(0xFF1A1A2E),
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Expanded(
+                              child: Text(
+                                entry.formNumber,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: const TextStyle(
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.w700,
+                                  color: Color(0xFF1A1A2E),
+                                ),
+                              ),
                             ),
-                          ),
+                            if (_isTappable) ...[
+                              Icon(
+                                Icons.chevron_right_rounded,
+                                size: 18,
+                                color: Colors.grey.shade400,
+                              ),
+                              const SizedBox(width: 2),
+                            ],
+                          ],
                         ),
+                        const SizedBox(height: 4),
                         Text(
-                          entry.createdAt,
+                          expenseFormatDateTime(entry.createdAt),
                           style: TextStyle(
-                            fontSize: 11,
+                            fontSize: 11.5,
                             color: Colors.grey.shade500,
                           ),
                         ),
+                        if (entry.createdByName.trim().isNotEmpty &&
+                            entry.createdByName != '-') ...[
+                          const SizedBox(height: 4),
+                          Text(
+                            entry.createdByName,
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: Colors.grey.shade600,
+                            ),
+                          ),
+                        ],
+                        if (entry.notes.trim().isNotEmpty &&
+                            entry.notes != '-') ...[
+                          const SizedBox(height: 6),
+                          Text(
+                            entry.notes,
+                            style: const TextStyle(
+                              fontSize: 12.5,
+                              color: Color(0xFF444444),
+                            ),
+                          ),
+                        ],
                       ],
                     ),
-                    if (entry.createdByName.trim().isNotEmpty &&
-                        entry.createdByName != '-') ...[
-                      const SizedBox(height: 4),
-                      Text(
-                        entry.createdByName,
-                        style: TextStyle(
-                          fontSize: 12,
-                          color: Colors.grey.shade600,
-                        ),
-                      ),
-                    ],
-                    if (entry.notes.trim().isNotEmpty &&
-                        entry.notes != '-') ...[
-                      const SizedBox(height: 6),
-                      Text(
-                        entry.notes,
-                        style: const TextStyle(
-                          fontSize: 12.5,
-                          color: Color(0xFF444444),
-                        ),
-                      ),
-                    ],
-                  ],
+                  ),
                 ),
               ),
             ),
