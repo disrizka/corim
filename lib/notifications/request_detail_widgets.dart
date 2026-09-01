@@ -1,5 +1,6 @@
 import 'package:corim/api/api.dart';
 import 'package:corim/notifications/notification_style.dart';
+import 'package:corim/shared/file_open_helper.dart';
 import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 
@@ -266,6 +267,21 @@ class RequestFileTile extends StatelessWidget {
       );
       return;
     }
+
+    // Images and PDFs open in-app (pinch-zoom / swipe-pages viewer, each
+    // with its own download button), matching the behavior already used
+    // in NotificationDetailScreen instead of kicking the user out to a
+    // browser.
+    if (FileOpenHelper.isImageUrl(url)) {
+      FileOpenHelper.showImagePreview(context, url, _label);
+      return;
+    }
+
+    if (FileOpenHelper.isPdfUrl(url)) {
+      FileOpenHelper.showPdfPreview(context, url, _label);
+      return;
+    }
+
     final uri = Uri.tryParse(url);
     if (uri == null) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -277,18 +293,16 @@ class RequestFileTile extends StatelessWidget {
       return;
     }
 
+    // Anything that isn't an image/PDF: try opening with an installed app
+    // first, and if there isn't one, download it and hand it to the native
+    // share sheet instead of just showing an "Unable to open" message.
     final canOpen = await canLaunchUrl(uri);
     if (!context.mounted) return;
 
     if (canOpen) {
       await launchUrl(uri, mode: LaunchMode.externalApplication);
     } else {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          behavior: SnackBarBehavior.floating,
-          content: Text('Unable to open $_label ($url)'),
-        ),
-      );
+      await FileOpenHelper.downloadAndShareFile(context, url, _label);
     }
   }
 

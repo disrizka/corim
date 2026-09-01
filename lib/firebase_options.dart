@@ -52,7 +52,7 @@ class DefaultFirebaseOptions {
 
   static const FirebaseOptions android = FirebaseOptions(
     apiKey: 'AIzaSyCNmp5HOJ-_hd73SVUtKrKkXQameIfSSr8',
-    appId: '1:1052779949245:android:96be83bf7bc6247ec45bd4',
+    appId: '1:1052779949245:android:bef3fbee7c42bd22c45bd4',
     messagingSenderId: '1052779949245',
     projectId: 'corim-apex',
     storageBucket: 'corim-apex.firebasestorage.app',
