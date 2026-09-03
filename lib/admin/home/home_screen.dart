@@ -321,7 +321,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
 
   Widget _buildRequestListHeader() {
     return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 16, 16, 12),
+      padding: const EdgeInsets.fromLTRB(10, 16, 10, 12),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -346,7 +346,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
 
   Widget _buildRequestListBody() {
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 16),
+      padding: const EdgeInsets.symmetric(horizontal: 10),
       child: Padding(
         padding: const EdgeInsets.only(bottom: _bottomNavReservedHeight),
         child: NotificationInfiniteListView(

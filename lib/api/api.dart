@@ -29,6 +29,8 @@ class Endpoints {
       "finance/expenses-employee/$id";
   static String expensesEmployeeAction(String id) =>
       "finance/expenses-employee/$id/action";
+  static String expensesEmployeeHistory(String id, String snapshotId) =>
+      "finance/expenses-employee/$id/history/$snapshotId";
 }
 
 class StorageKeys {

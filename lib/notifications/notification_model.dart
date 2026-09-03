@@ -19,6 +19,7 @@ class NotificationItem {
   final String entity;
   final String clientName;
   final bool canApprove;
+  final num? amount;
 
   const NotificationItem({
     required this.id,
@@ -39,6 +40,7 @@ class NotificationItem {
     this.entity = '-',
     this.clientName = '-',
     this.canApprove = true,
+    this.amount,
   });
 
   bool get isPending => approvalStatus.toUpperCase() == 'PENDING';
@@ -104,6 +106,7 @@ class NotificationItem {
       entity: entity,
       clientName: clientName,
       canApprove: canApprove,
+      amount: amount,
     );
   }
 
@@ -135,6 +138,9 @@ class NotificationItem {
       // backend sends one of these keys, only the real approver will see
       // Approve/Reject.
       canApprove: _notifCanApproveOf(json),
+      amount: json['amount'] is num
+          ? json['amount'] as num
+          : num.tryParse('${json['amount'] ?? ''}'),
     );
   }
 }

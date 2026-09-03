@@ -720,6 +720,58 @@ class _ExpenseRequestCard extends StatelessWidget {
                   ),
                 ),
                 const SizedBox(height: 12),
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.center,
+                  children: [
+                    Expanded(
+                      child: Row(
+                        children: [
+                          const Icon(
+                            Icons.person_outline_rounded,
+                            size: 14,
+                            color: Color(0xFF555555),
+                          ),
+                          const SizedBox(width: 4),
+                          Expanded(
+                            child: Text(
+                              item.createdBy,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(
+                                fontSize: 12,
+                                fontWeight: FontWeight.w500,
+                                color: Color(0xFF222222),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Icon(
+                          Icons.payments_outlined,
+                          size: 14,
+                          color: Color(0xFF0824A0),
+                        ),
+                        const SizedBox(width: 4),
+                        Text(
+                          formatRupiahExpense(item.amount),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                            fontSize: 12.5,
+                            fontWeight: FontWeight.w700,
+                            color: Color(0xFF0824A0),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 10),
                 _EntityBadge(
                   code: item.entity?.code ?? fallbackEntity?.code,
                   name: item.entity?.name ?? fallbackEntity?.name,

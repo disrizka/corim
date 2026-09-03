@@ -386,7 +386,6 @@ class _NotificationCardState extends ConsumerState<_NotificationCard> {
   @override
   Widget build(BuildContext context) {
     final n = widget.item;
-    final status = NotifStatus.fromApproval(n.approvalStatus);
 
     return Container(
       decoration: BoxDecoration(
@@ -416,9 +415,15 @@ class _NotificationCardState extends ConsumerState<_NotificationCard> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     NotifIconChip(
-                      icon: status.icon,
-                      background: status.bg,
-                      foreground: status.accent,
+                      icon: n.isExpenseRequest
+                          ? Icons.receipt_long_rounded
+                          : Icons.trending_up_rounded,
+                      background: n.isExpenseRequest
+                          ? const Color(0xFFEEF2FF)
+                          : const Color(0xFFDCFCE7),
+                      foreground: n.isExpenseRequest
+                          ? const Color(0xFF0824A0)
+                          : const Color(0xFF16A34A),
                     ),
                     const SizedBox(width: 12),
                     Expanded(

@@ -309,6 +309,49 @@ class ExpenseRequestDetailNotifier
     }
   }
 
+  /// Fetches a single History row's snapshot detail — i.e. what the web
+  /// dashboard's "DETAIL INFORMATION" popup shows (notes + item lines) for
+  /// that specific revision — from
+  /// `GET finance/expenses-employee/{id}/history/{snapshotId}`.
+  ///
+  /// Throws on failure; the caller (the History tab) is expected to catch
+  /// it and show a snackbar rather than replacing the whole-screen state,
+  /// since a failed popup fetch shouldn't blow away the detail already on
+  /// screen.
+  Future<ExpenseHistorySnapshotDetail> fetchHistorySnapshot(
+    String snapshotId,
+  ) async {
+    final token = ref.read(authProvider).accessToken ?? '';
+    final uri = Uri.parse(
+      '${ApiConfig.baseUrl}${Endpoints.expensesEmployeeHistory(id, snapshotId)}',
+    );
+
+    print('[EXPENSE HISTORY] GET $uri');
+    var response = await http.get(uri, headers: _headers(token));
+    print('[EXPENSE HISTORY] Status: ${response.statusCode}');
+
+    if (response.statusCode == 401) {
+      final newToken = await ref
+          .read(authProvider.notifier)
+          .refreshFromInterceptor();
+      if (newToken == null) {
+        throw Exception('Sesi berakhir, silakan login kembali');
+      }
+      response = await http.get(uri, headers: _headers(newToken));
+    }
+
+    if (response.statusCode == 200) {
+      final body = jsonDecode(response.body);
+      final data = body['data'];
+      return ExpenseHistorySnapshotDetail.fromJson(
+        Map<String, dynamic>.from(data ?? {}),
+      );
+    }
+
+    print('[EXPENSE HISTORY] Body: ${response.body}');
+    throw Exception('Gagal memuat detail history (${response.statusCode})');
+  }
+
   /// Approve or reject this expense request while it's still PENDING.
   /// Refetches the detail afterwards (on success) so the screen reflects
   /// the new status/phase immediately.

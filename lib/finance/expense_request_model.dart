@@ -243,6 +243,7 @@ class ExpenseItemLine {
   final num amount;
   final String dueDate;
   final String itemDescription;
+  final String operationExpense;
   final num qty;
   final num rate;
 
@@ -250,6 +251,7 @@ class ExpenseItemLine {
     required this.amount,
     required this.dueDate,
     required this.itemDescription,
+    this.operationExpense = '',
     required this.qty,
     required this.rate,
   });
@@ -264,12 +266,51 @@ class ExpenseItemLine {
           : num.tryParse('${json['amount']}') ?? 0,
       dueDate: (json['dueDate'] ?? '-').toString(),
       itemDescription: (json['itemDescription'] ?? '-').toString(),
+      operationExpense: (json['operationExpense'] ?? '').toString(),
       qty: (json['qty'] is num)
           ? json['qty'] as num
           : num.tryParse('${json['qty']}') ?? 0,
       rate: (json['rate'] is num)
           ? json['rate'] as num
           : num.tryParse('${json['rate']}') ?? 0,
+    );
+  }
+}
+
+/// Snapshot payload returned by
+/// `GET finance/expenses-employee/{id}/history/{snapshotId}` — the
+/// "DETAIL INFORMATION" popup shown on the web dashboard when a History
+/// row is opened: just the notes for that revision plus its item lines
+/// (each optionally tagged with an Operation Expense category, as seen on
+/// PRF/SRF/SSR forms).
+class ExpenseHistorySnapshotDetail {
+  final String notes;
+  final List<ExpenseItemLine> items;
+
+  const ExpenseHistorySnapshotDetail({
+    required this.notes,
+    required this.items,
+  });
+
+  factory ExpenseHistorySnapshotDetail.fromJson(Map<String, dynamic> json) {
+    // Backend may nest this under `detailInformation` (matching the shape
+    // of the main detail endpoint) or send `notes`/`items` at the top
+    // level — support both so this keeps working either way.
+    final detailInformation = (json['detailInformation'] is Map)
+        ? Map<String, dynamic>.from(json['detailInformation'] as Map)
+        : json;
+    final rawItems = (detailInformation['items'] is List)
+        ? detailInformation['items'] as List
+        : const [];
+
+    return ExpenseHistorySnapshotDetail(
+      notes: (json['notes'] ?? detailInformation['notes'] ?? '-').toString(),
+      items: rawItems
+          .map(
+            (e) =>
+                ExpenseItemLine.fromJson(Map<String, dynamic>.from(e as Map)),
+          )
+          .toList(),
     );
   }
 }
