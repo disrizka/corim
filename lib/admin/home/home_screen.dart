@@ -347,21 +347,26 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   Widget _buildRequestListBody() {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 10),
-      child: Padding(
-        padding: const EdgeInsets.only(bottom: _bottomNavReservedHeight),
-        child: NotificationInfiniteListView(
-          cardBuilder: (context, item) => Padding(
-            padding: const EdgeInsets.only(bottom: 12),
-            child: _buildRequestCard(item),
-          ),
-          filter: _matchesFilters,
-          searchQuery: _searchController.text,
-          searchMatcher: _matchesSearch,
-          sortRank: (n) => n.isPending ? 0 : 1,
-          emptyBuilder: (context) => _buildEmptyState(),
-          emptyFilterBuilder: (context, hasSearch) => _buildEmptyFilterState(),
-          errorBuilder: (context, err) => _buildErrorState(err),
+      child: NotificationInfiniteListView(
+        // jarak bawah di dalam list, bukan di luar list,
+        // supaya list tetap tampil sampai ke bawah layar (di belakang nav)
+        listPadding: const EdgeInsets.fromLTRB(
+          16,
+          16,
+          16,
+          _bottomNavReservedHeight + 24,
         ),
+        cardBuilder: (context, item) => Padding(
+          padding: const EdgeInsets.only(bottom: 12),
+          child: _buildRequestCard(item),
+        ),
+        filter: _matchesFilters,
+        searchQuery: _searchController.text,
+        searchMatcher: _matchesSearch,
+        sortRank: (n) => n.isPending ? 0 : 1,
+        emptyBuilder: (context) => _buildEmptyState(),
+        emptyFilterBuilder: (context, hasSearch) => _buildEmptyFilterState(),
+        errorBuilder: (context, err) => _buildErrorState(err),
       ),
     );
   }
