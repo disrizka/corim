@@ -1,4 +1,3 @@
-import 'package:corim/admin/project/project_detail_screen.dart';
 import 'package:corim/finance/expense_request_detail_screen.dart';
 import 'package:corim/notifications/notification_detail_screen.dart';
 import 'package:corim/notifications/notification_model.dart';
@@ -355,25 +354,6 @@ class _NotificationCardState extends ConsumerState<_NotificationCard> {
     );
   }
 
-  void _openProject() {
-    final projectId = widget.item.projectId.trim();
-    if (projectId.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          behavior: SnackBarBehavior.floating,
-          content: Text('No project linked to this notification'),
-        ),
-      );
-      return;
-    }
-    Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (_) => ProjectDetailScreen(projectId: projectId),
-      ),
-    );
-  }
-
   void _openExpenseDetail() {
     Navigator.push(
       context,
@@ -497,47 +477,33 @@ class _NotificationCardState extends ConsumerState<_NotificationCard> {
                       ),
                   ],
                 ),
-                const SizedBox(height: 10),
 
-                // --- TOMBOL LINK AKSI ---
-                Align(
-                  alignment: Alignment.centerLeft,
-                  child: n.isExpenseRequest
-                      ? TextButton.icon(
-                          onPressed: _openExpenseDetail,
-                          icon: const Icon(Icons.open_in_new_rounded, size: 15),
-                          label: const Text(
-                            'Expense Request Detail',
-                            style: TextStyle(
-                              fontSize: 12.5,
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
-                          style: TextButton.styleFrom(
-                            foregroundColor: const Color(0xFF075985),
-                            padding: EdgeInsets.zero,
-                            minimumSize: const Size(0, 0),
-                            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                          ),
-                        )
-                      : TextButton.icon(
-                          onPressed: _openProject,
-                          icon: const Icon(Icons.open_in_new_rounded, size: 15),
-                          label: const Text(
-                            'View Project',
-                            style: TextStyle(
-                              fontSize: 12.5,
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
-                          style: TextButton.styleFrom(
-                            foregroundColor: const Color(0xFF075985),
-                            padding: EdgeInsets.zero,
-                            minimumSize: const Size(0, 0),
-                            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                          ),
+                // "View Project" link removed — expense requests still link
+                // out to their detail screen, other notification types no
+                // longer show an outbound action link here.
+                if (n.isExpenseRequest) ...[
+                  const SizedBox(height: 10),
+                  Align(
+                    alignment: Alignment.centerLeft,
+                    child: TextButton.icon(
+                      onPressed: _openExpenseDetail,
+                      icon: const Icon(Icons.open_in_new_rounded, size: 15),
+                      label: const Text(
+                        'Expense Request Detail',
+                        style: TextStyle(
+                          fontSize: 12.5,
+                          fontWeight: FontWeight.w600,
                         ),
-                ),
+                      ),
+                      style: TextButton.styleFrom(
+                        foregroundColor: const Color(0xFF075985),
+                        padding: EdgeInsets.zero,
+                        minimumSize: const Size(0, 0),
+                        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                      ),
+                    ),
+                  ),
+                ],
 
                 if (n.isPending && n.canApprove) ...[
                   const SizedBox(height: 14),

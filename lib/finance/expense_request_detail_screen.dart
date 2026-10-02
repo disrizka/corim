@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:corim/admin/project/project_detail_screen.dart';
 import 'package:corim/crm/client_detail/client_detail_screen.dart';
 import 'package:corim/finance/expense_request_model.dart';
@@ -6,6 +8,11 @@ import 'package:corim/notifications/notification_style.dart';
 import 'package:corim/notifications/request_detail_widgets.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+
+/// Which of the two independent panels the user is currently interacting
+/// with. Drives the animated split ratio between them — see
+/// [_ExpenseRequestDetailScreenState._targetRatioFor].
+enum _ActivePanel { none, top, bottom }
 
 class ExpenseRequestDetailScreen extends ConsumerStatefulWidget {
   final String expenseId;
@@ -19,22 +26,103 @@ class ExpenseRequestDetailScreen extends ConsumerStatefulWidget {
 
 class _ExpenseRequestDetailScreenState
     extends ConsumerState<ExpenseRequestDetailScreen>
-    with SingleTickerProviderStateMixin {
+    with TickerProviderStateMixin {
   final _noteController = TextEditingController();
   late final TabController _tabController;
   bool _isSubmitting = false;
+
+  // ---------------------------------------------------------------------
+  // Two-panel split state.
+  //
+  // The screen is split into a top panel (Detail Information / Travel
+  // Itinerary) and a bottom panel (the Detail Item / Status / History
+  // tabs). Both scroll independently — there's no shared/coordinated
+  // scroll offset like a NestedScrollView would give you.
+  //
+  // Instead, whichever panel the user is actively scrolling "wins" more
+  // space, and the other panel is animated down to about half its normal
+  // height — like the active panel is sliding over and partially covering
+  // the idle one. Once scrolling settles (with a short grace period so
+  // fling/deceleration doesn't flicker the layout), both panels animate
+  // back to their normal proportional split.
+  // ---------------------------------------------------------------------
+
+  static const double _baseTopRatio = 0.42;
+  static const double _minPanelHeight = 160.0;
+  static const Duration _splitAnimDuration = Duration(milliseconds: 320);
+  static const Duration _idleGrace = Duration(milliseconds: 260);
+
+  _ActivePanel _activePanel = _ActivePanel.none;
+  late AnimationController _splitController;
+  late Animation<double> _splitRatio;
+  Timer? _idleTimer;
 
   @override
   void initState() {
     super.initState();
     _tabController = TabController(length: 3, vsync: this);
+    _splitController = AnimationController(
+      vsync: this,
+      duration: _splitAnimDuration,
+    );
+    _splitRatio = const AlwaysStoppedAnimation(_baseTopRatio);
   }
 
   @override
   void dispose() {
     _noteController.dispose();
     _tabController.dispose();
+    _splitController.dispose();
+    _idleTimer?.cancel();
     super.dispose();
+  }
+
+  /// Target top-panel height ratio for a given active panel:
+  /// - none   → the normal proportional split
+  /// - top    → top panel grows, bottom panel shrinks to ~half its size
+  /// - bottom → bottom panel grows, top panel shrinks to ~half its size
+  double _targetRatioFor(_ActivePanel panel) {
+    switch (panel) {
+      case _ActivePanel.top:
+        return _baseTopRatio + (1 - _baseTopRatio) * 0.5;
+      case _ActivePanel.bottom:
+        return _baseTopRatio * 0.5;
+      case _ActivePanel.none:
+        return _baseTopRatio;
+    }
+  }
+
+  void _setActivePanel(_ActivePanel panel) {
+    if (_activePanel == panel) return;
+    final begin = _splitRatio.value;
+    final end = _targetRatioFor(panel);
+    _activePanel = panel;
+    _splitRatio = Tween<double>(begin: begin, end: end).animate(
+      CurvedAnimation(parent: _splitController, curve: Curves.easeOutCubic),
+    );
+    _splitController
+      ..stop()
+      ..reset()
+      ..forward();
+  }
+
+  /// Wired into both panels' [NotificationListener]. Scroll activity in
+  /// either panel nudges the split; a short idle grace period after the
+  /// scroll ends restores the normal split so quick taps/tiny scrolls
+  /// don't cause jumpy layout changes.
+  bool _handleScrollNotification(_ActivePanel panel, ScrollNotification n) {
+    if (n is ScrollStartNotification || n is ScrollUpdateNotification) {
+      _idleTimer?.cancel();
+      if (_activePanel != panel) {
+        setState(() => _setActivePanel(panel));
+      }
+    } else if (n is ScrollEndNotification) {
+      _idleTimer?.cancel();
+      _idleTimer = Timer(_idleGrace, () {
+        if (mounted) setState(() => _setActivePanel(_ActivePanel.none));
+      });
+    }
+    return false;
   }
 
   void _openProject(BuildContext context, ExpenseRequestDetail d) {
@@ -280,22 +368,73 @@ class _ExpenseRequestDetailScreenState
     );
   }
 
+  // ---------------------------------------------------------------------
+  // Body: two INDEPENDENT scrollables stacked in a Column — the top panel
+  // (Detail Information / Travel Itinerary) and the bottom panel (the
+  // tabs). They do not share a scroll position. Instead their heights are
+  // driven by an animated ratio: whichever one the user is scrolling
+  // grows, the other shrinks to ~half its normal height, then both settle
+  // back to the proportional base split shortly after scrolling stops.
+  // See _handleScrollNotification / _setActivePanel above.
+  // ---------------------------------------------------------------------
+
   Widget _buildBody(
     BuildContext context,
     WidgetRef ref,
     ExpenseRequestDetail d,
   ) {
-    return Column(
-      children: [
-        ConstrainedBox(
-          // Bounded so a long Detail Information / Travel Itinerary pair
-          // (many travel legs, long client/project names, etc.) scrolls on
-          // its own instead of squeezing the tabs below off screen.
-          constraints: BoxConstraints(
-            maxHeight: MediaQuery.of(context).size.height * 0.42,
-          ),
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final totalHeight = constraints.maxHeight;
+        return AnimatedBuilder(
+          animation: _splitController,
+          builder: (context, _) {
+            final ratio = _splitRatio.value;
+            var topHeight = totalHeight * ratio;
+            final maxTop = totalHeight - _minPanelHeight;
+            topHeight = topHeight.clamp(
+              _minPanelHeight,
+              maxTop <= _minPanelHeight ? _minPanelHeight : maxTop,
+            );
+            final bottomHeight = totalHeight - topHeight;
+
+            return Column(
+              children: [
+                SizedBox(height: topHeight, child: _buildTopPanel(context, d)),
+                SizedBox(
+                  height: bottomHeight,
+                  child: _buildBottomPanel(context, ref, d),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+  }
+
+  /// Top panel: Detail Information + (optional) Travel Itinerary, in its
+  /// own independent scroll view. Rounded bottom + subtle shadow so it
+  /// visually reads as a sheet that can slide down and cover the panel
+  /// below when it's the one being actively scrolled.
+  Widget _buildTopPanel(BuildContext context, ExpenseRequestDetail d) {
+    return ClipRRect(
+      borderRadius: const BorderRadius.vertical(bottom: Radius.circular(20)),
+      child: DecoratedBox(
+        decoration: BoxDecoration(
+          color: NotifColors.background,
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.05),
+              blurRadius: 10,
+              offset: const Offset(0, 4),
+            ),
+          ],
+        ),
+        child: NotificationListener<ScrollNotification>(
+          onNotification: (n) => _handleScrollNotification(_ActivePanel.top, n),
           child: SingleChildScrollView(
-            padding: const EdgeInsets.fromLTRB(20, 12, 20, 16),
+            padding: const EdgeInsets.fromLTRB(20, 12, 20, 20),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
@@ -308,9 +447,47 @@ class _ExpenseRequestDetailScreenState
             ),
           ),
         ),
-        Container(
-          color: Colors.white,
-          child: TabBar(
+      ),
+    );
+  }
+
+  /// Bottom panel: TabBar (fixed) + TabBarView, each tab scrolling
+  /// independently of the top panel. Rounded top + shadow + a small drag
+  /// handle so it reads as a sheet that can rise up and cover the top
+  /// panel when it's the one being actively scrolled.
+  Widget _buildBottomPanel(
+    BuildContext context,
+    WidgetRef ref,
+    ExpenseRequestDetail d,
+  ) {
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.08),
+            blurRadius: 14,
+            offset: const Offset(0, -4),
+          ),
+        ],
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: Column(
+        children: [
+          const SizedBox(height: 8),
+          Center(
+            child: Container(
+              width: 36,
+              height: 4,
+              decoration: BoxDecoration(
+                color: Colors.grey.shade300,
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
+          ),
+          const SizedBox(height: 6),
+          TabBar(
             controller: _tabController,
             labelColor: const Color(0xFF075985),
             unselectedLabelColor: Colors.grey.shade500,
@@ -325,19 +502,23 @@ class _ExpenseRequestDetailScreenState
               Tab(text: 'History'),
             ],
           ),
-        ),
-        const Divider(height: 1, color: NotifColors.divider),
-        Expanded(
-          child: TabBarView(
-            controller: _tabController,
-            children: [
-              _buildItemsTab(context, ref, d),
-              _buildStatusTab(context, d),
-              _buildHistoryTab(d),
-            ],
+          const Divider(height: 1, color: NotifColors.divider),
+          Expanded(
+            child: NotificationListener<ScrollNotification>(
+              onNotification: (n) =>
+                  _handleScrollNotification(_ActivePanel.bottom, n),
+              child: TabBarView(
+                controller: _tabController,
+                children: [
+                  _buildItemsTab(context, ref, d),
+                  _buildStatusTab(context, d),
+                  _buildHistoryTab(context, ref, d),
+                ],
+              ),
+            ),
           ),
-        ),
-      ],
+        ],
+      ),
     );
   }
 
@@ -355,22 +536,26 @@ class _ExpenseRequestDetailScreenState
       onRefresh: () => ref
           .read(expenseRequestDetailProvider(widget.expenseId).notifier)
           .fetch(),
-      child: SingleChildScrollView(
+      child: CustomScrollView(
+        key: const PageStorageKey('expense_tab_items'),
         physics: const AlwaysScrollableScrollPhysics(),
-        padding: const EdgeInsets.fromLTRB(20, 16, 20, 28),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            if (d.isSettlementForm && d.stb != null && !d.stb!.isEmpty)
-              _buildStbSections(d.stb!)
-            else if (d.isSettlementForm)
-              _buildSettlementItemsCard(d)
-            else
-              _buildStandardItemsCard(d),
-            const SizedBox(height: 16),
-            _buildFilesSection(d),
-          ],
-        ),
+        slivers: [
+          SliverPadding(
+            padding: const EdgeInsets.fromLTRB(20, 16, 20, 28),
+            sliver: SliverList(
+              delegate: SliverChildListDelegate([
+                if (d.isSettlementForm && d.stb != null && !d.stb!.isEmpty)
+                  _buildStbSections(d.stb!)
+                else if (d.isSettlementForm)
+                  _buildSettlementItemsCard(d)
+                else
+                  _buildStandardItemsCard(d),
+                const SizedBox(height: 16),
+                _buildFilesSection(d),
+              ]),
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -587,64 +772,79 @@ class _ExpenseRequestDetailScreenState
   // ---------------------------------------------------------------------
 
   /// Status tab now only holds the phase-of-request timeline (Detail
-  /// Information and Travel Itinerary live above the tabs instead, since
+  /// Information and Travel Itinerary live in the top panel instead, since
   /// they're relevant regardless of which tab is open).
   Widget _buildStatusTab(BuildContext context, ExpenseRequestDetail d) {
     final phases = [...d.phaseOfRequest]
       ..sort((a, b) => a.phaseOrder.compareTo(b.phaseOrder));
 
-    if (phases.isEmpty && (d.notes.trim().isEmpty || d.notes.trim() == '-')) {
-      return Center(
-        child: Padding(
-          padding: const EdgeInsets.all(24),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(
-                Icons.timelapse_rounded,
-                size: 36,
-                color: Colors.grey.shade400,
-              ),
-              const SizedBox(height: 10),
-              Text(
-                'No phase information yet',
-                style: TextStyle(fontSize: 13, color: Colors.grey.shade500),
-              ),
-            ],
-          ),
-        ),
-      );
-    }
+    final isEmpty =
+        phases.isEmpty && (d.notes.trim().isEmpty || d.notes.trim() == '-');
 
-    return SingleChildScrollView(
+    return CustomScrollView(
+      key: const PageStorageKey('expense_tab_status'),
       physics: const AlwaysScrollableScrollPhysics(),
-      padding: const EdgeInsets.fromLTRB(20, 16, 20, 28),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          if (phases.isNotEmpty) _buildPhaseCard(phases),
-          if (d.notes.trim().isNotEmpty && d.notes.trim() != '-') ...[
-            const SizedBox(height: 16),
-            Text(
-              'Notes:',
-              style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
-            ),
-            const SizedBox(height: 4),
-            Container(
-              width: double.infinity,
-              padding: const EdgeInsets.all(10),
-              decoration: BoxDecoration(
-                color: Colors.grey.shade100,
-                borderRadius: BorderRadius.circular(10),
+      slivers: [
+        if (isEmpty)
+          SliverFillRemaining(
+            hasScrollBody: false,
+            child: Center(
+              child: Padding(
+                padding: const EdgeInsets.all(24),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(
+                      Icons.timelapse_rounded,
+                      size: 36,
+                      color: Colors.grey.shade400,
+                    ),
+                    const SizedBox(height: 10),
+                    Text(
+                      'No phase information yet',
+                      style: TextStyle(
+                        fontSize: 13,
+                        color: Colors.grey.shade500,
+                      ),
+                    ),
+                  ],
+                ),
               ),
-              child: Text(
-                d.notes,
-                style: TextStyle(fontSize: 12.5, color: Colors.grey.shade700),
-              ),
             ),
-          ],
-        ],
-      ),
+          )
+        else
+          SliverPadding(
+            padding: const EdgeInsets.fromLTRB(20, 16, 20, 28),
+            sliver: SliverList(
+              delegate: SliverChildListDelegate([
+                if (phases.isNotEmpty) _buildPhaseCard(phases),
+                if (d.notes.trim().isNotEmpty && d.notes.trim() != '-') ...[
+                  const SizedBox(height: 16),
+                  Text(
+                    'Notes:',
+                    style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
+                  ),
+                  const SizedBox(height: 4),
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.all(10),
+                    decoration: BoxDecoration(
+                      color: Colors.grey.shade100,
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: Text(
+                      d.notes,
+                      style: TextStyle(
+                        fontSize: 12.5,
+                        color: Colors.grey.shade700,
+                      ),
+                    ),
+                  ),
+                ],
+              ]),
+            ),
+          ),
+      ],
     );
   }
 
@@ -848,55 +1048,109 @@ class _ExpenseRequestDetailScreenState
   // Tab 3: History (past submissions / revisions)
   // ---------------------------------------------------------------------
 
-  Widget _buildHistoryTab(ExpenseRequestDetail d) {
-    if (d.history.isEmpty) {
-      return Center(
-        child: Padding(
-          padding: const EdgeInsets.all(24),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(
-                Icons.history_rounded,
-                size: 36,
-                color: Colors.grey.shade400,
-              ),
-              const SizedBox(height: 10),
-              Text(
-                'No history yet',
-                style: TextStyle(fontSize: 13, color: Colors.grey.shade500),
-              ),
-            ],
-          ),
-        ),
-      );
-    }
-
-    return SingleChildScrollView(
+  Widget _buildHistoryTab(
+    BuildContext context,
+    WidgetRef ref,
+    ExpenseRequestDetail d,
+  ) {
+    return CustomScrollView(
+      key: const PageStorageKey('expense_tab_history'),
       physics: const AlwaysScrollableScrollPhysics(),
-      padding: const EdgeInsets.fromLTRB(20, 16, 20, 28),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          for (var i = 0; i < d.history.length; i++)
-            _HistoryTile(
-              entry: d.history[i],
-              isLast: i == d.history.length - 1,
-              onTap: () => _openHistoryEntry(context, d.history[i]),
+      slivers: [
+        if (d.history.isEmpty)
+          SliverFillRemaining(
+            hasScrollBody: false,
+            child: Center(
+              child: Padding(
+                padding: const EdgeInsets.all(24),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(
+                      Icons.history_rounded,
+                      size: 36,
+                      color: Colors.grey.shade400,
+                    ),
+                    const SizedBox(height: 10),
+                    Text(
+                      'No history yet',
+                      style: TextStyle(
+                        fontSize: 13,
+                        color: Colors.grey.shade500,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
             ),
-        ],
-      ),
+          )
+        else
+          SliverPadding(
+            padding: const EdgeInsets.fromLTRB(20, 16, 20, 28),
+            sliver: SliverList(
+              delegate: SliverChildListDelegate([
+                for (var i = 0; i < d.history.length; i++)
+                  _HistoryTile(
+                    entry: d.history[i],
+                    isLast: i == d.history.length - 1,
+                    onTap: () => _openHistoryEntry(context, d.history[i]),
+                  ),
+              ]),
+            ),
+          ),
+      ],
     );
   }
 
-  /// Opens the detail screen for a history/revision entry so the user can
-  /// see its full breakdown, not just the summary shown in the tile.
+  /// Opens the "DETAIL INFORMATION" popup for a History row — mirrors the
+  /// web dashboard's modal (Notes + item list for that revision) instead
+  /// of navigating to a whole new detail screen, and loads it live from
+  /// `GET finance/expenses-employee/{expenseId}/history/{snapshotId}`.
   void _openHistoryEntry(BuildContext context, ExpenseHistoryEntry entry) {
-    if (entry.id.trim().isEmpty || entry.id == widget.expenseId) return;
-    Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (_) => ExpenseRequestDetailScreen(expenseId: entry.id),
+    if (entry.id.trim().isEmpty) return;
+    _showHistorySnapshotDialog(entry.id);
+  }
+
+  void _showHistorySnapshotDialog(String snapshotId) {
+    final future = ref
+        .read(expenseRequestDetailProvider(widget.expenseId).notifier)
+        .fetchHistorySnapshot(snapshotId);
+
+    showDialog(
+      context: context,
+      barrierDismissible: true,
+      builder: (ctx) => Dialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        insetPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 40),
+        child: ConstrainedBox(
+          constraints: BoxConstraints(
+            maxHeight: MediaQuery.of(ctx).size.height * 0.8,
+          ),
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(20, 22, 20, 16),
+            child: FutureBuilder<ExpenseHistorySnapshotDetail>(
+              future: future,
+              builder: (context, snapshot) {
+                if (snapshot.connectionState != ConnectionState.done) {
+                  return const SizedBox(
+                    height: 160,
+                    child: Center(child: CircularProgressIndicator()),
+                  );
+                }
+                if (snapshot.hasError) {
+                  return _HistorySnapshotError(
+                    message: snapshot.error.toString(),
+                    onClose: () => Navigator.of(ctx).pop(),
+                  );
+                }
+                return _HistorySnapshotContent(
+                  detail: snapshot.data!,
+                  onClose: () => Navigator.of(ctx).pop(),
+                );
+              },
+            ),
+          ),
+        ),
       ),
     );
   }
@@ -1220,6 +1474,223 @@ class _HistoryTile extends StatelessWidget {
           ),
         ],
       ),
+    );
+  }
+}
+
+/// Content of the History "DETAIL INFORMATION" popup — Notes + Items,
+/// matching the web dashboard's modal for a history/revision snapshot.
+class _HistorySnapshotContent extends StatelessWidget {
+  final ExpenseHistorySnapshotDetail detail;
+  final VoidCallback onClose;
+
+  const _HistorySnapshotContent({required this.detail, required this.onClose});
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text(
+          'DETAIL INFORMATION',
+          style: TextStyle(
+            fontSize: 11,
+            fontWeight: FontWeight.w700,
+            letterSpacing: 0.6,
+            color: Colors.grey,
+          ),
+        ),
+        const Divider(height: 22, color: NotifColors.divider),
+        RequestInfoRow(
+          icon: Icons.description_outlined,
+          label: 'Notes:',
+          value: detail.notes.trim().isEmpty || detail.notes == '-'
+              ? '-'
+              : detail.notes,
+        ),
+        const SizedBox(height: 14),
+        const Text(
+          'ITEMS',
+          style: TextStyle(
+            fontSize: 11,
+            fontWeight: FontWeight.w700,
+            letterSpacing: 0.6,
+            color: Colors.grey,
+          ),
+        ),
+        const SizedBox(height: 8),
+        Flexible(
+          child: detail.items.isEmpty
+              ? Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 12),
+                  child: Text(
+                    'No items',
+                    style: TextStyle(
+                      fontSize: 12.5,
+                      color: Colors.grey.shade500,
+                    ),
+                  ),
+                )
+              : ListView.separated(
+                  shrinkWrap: true,
+                  physics: const ClampingScrollPhysics(),
+                  itemCount: detail.items.length,
+                  separatorBuilder: (_, __) => const SizedBox(height: 8),
+                  itemBuilder: (_, i) =>
+                      _HistoryItemTile(item: detail.items[i]),
+                ),
+        ),
+        const SizedBox(height: 18),
+        Align(
+          alignment: Alignment.centerRight,
+          child: SizedBox(
+            height: 42,
+            child: DecoratedBox(
+              decoration: BoxDecoration(
+                gradient: NotifColors.brandGradient,
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: ElevatedButton(
+                onPressed: onClose,
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.transparent,
+                  foregroundColor: Colors.white,
+                  shadowColor: Colors.transparent,
+                  elevation: 0,
+                  padding: const EdgeInsets.symmetric(horizontal: 26),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                ),
+                child: const Text(
+                  'Back',
+                  style: TextStyle(fontWeight: FontWeight.w600),
+                ),
+              ),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+/// One item row inside the history snapshot popup — same shape as the
+/// Detail Item tab's [_ItemTile], plus the Operation Expense chip the web
+/// table shows as its first column.
+class _HistoryItemTile extends StatelessWidget {
+  final ExpenseItemLine item;
+
+  const _HistoryItemTile({required this.item});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(10),
+      decoration: BoxDecoration(
+        color: const Color(0xFFF8F9FC),
+        borderRadius: BorderRadius.circular(10),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          if (item.operationExpense.trim().isNotEmpty)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 6),
+              child: Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 10,
+                  vertical: 4,
+                ),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFEDE9FE),
+                  borderRadius: BorderRadius.circular(999),
+                ),
+                child: Text(
+                  expenseTitleCase(item.operationExpense).toUpperCase(),
+                  style: const TextStyle(
+                    fontSize: 10,
+                    fontWeight: FontWeight.w700,
+                    letterSpacing: 0.2,
+                    color: Color(0xFF5B21B6),
+                  ),
+                ),
+              ),
+            ),
+          Text(
+            item.itemDescription,
+            style: const TextStyle(
+              fontSize: 13,
+              fontWeight: FontWeight.w600,
+              color: Color(0xFF1A1A2E),
+            ),
+          ),
+          const SizedBox(height: 6),
+          Row(
+            children: [
+              Expanded(
+                child: _ItemStat(label: 'Qty', value: '${item.qty}'),
+              ),
+              Expanded(
+                child: _ItemStat(label: 'Rate', value: item.formattedRate),
+              ),
+              Expanded(
+                child: _ItemStat(
+                  label: 'Due Date',
+                  value: item.dueDate.isEmpty ? '-' : item.dueDate,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 6),
+          Align(
+            alignment: Alignment.centerRight,
+            child: Text(
+              item.formattedAmount,
+              style: const TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.w700,
+                color: Color(0xFF075985),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Error state for the history snapshot popup (fetch failed).
+class _HistorySnapshotError extends StatelessWidget {
+  final String message;
+  final VoidCallback onClose;
+
+  const _HistorySnapshotError({required this.message, required this.onClose});
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Icon(Icons.wifi_off_rounded, size: 32, color: Color(0xFFB91C1C)),
+        const SizedBox(height: 10),
+        const Text(
+          'Failed to load history detail',
+          style: TextStyle(fontWeight: FontWeight.w700, fontSize: 13),
+        ),
+        const SizedBox(height: 6),
+        Text(
+          message,
+          style: TextStyle(fontSize: 11, color: Colors.grey.shade500),
+        ),
+        const SizedBox(height: 16),
+        Align(
+          alignment: Alignment.centerRight,
+          child: TextButton(onPressed: onClose, child: const Text('Close')),
+        ),
+      ],
     );
   }
 }

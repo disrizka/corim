@@ -1,5 +1,6 @@
 class ApiConfig {
   static const String baseUrl = "https://corim-api.eon.id/";
+  // static const String baseUrl = "https://api.corimgroup.com/";
   static const String contentTypeJson = "application/json";
 
   static const String storageBaseUrl = '${baseUrl}storage/';
