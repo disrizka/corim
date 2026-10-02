@@ -3,6 +3,7 @@
 import 'package:firebase_core/firebase_core.dart' show FirebaseOptions;
 import 'package:flutter/foundation.dart'
     show defaultTargetPlatform, kIsWeb, TargetPlatform;
+import 'package:flutter/services.dart' show appFlavor;
 
 /// Default [FirebaseOptions] for use with your Firebase apps.
 ///
@@ -50,9 +51,21 @@ class DefaultFirebaseOptions {
     measurementId: 'G-3HW8GNKWHK',
   );
 
-  static const FirebaseOptions android = FirebaseOptions(
+  // Android dipilih per flavor (com.corim.apex = prod, com.corim.apexdev = dev).
+  static FirebaseOptions get android =>
+      appFlavor == 'prod' ? androidProd : androidDev;
+
+  static const FirebaseOptions androidProd = FirebaseOptions(
     apiKey: 'AIzaSyCNmp5HOJ-_hd73SVUtKrKkXQameIfSSr8',
     appId: '1:1052779949245:android:bef3fbee7c42bd22c45bd4',
+    messagingSenderId: '1052779949245',
+    projectId: 'corim-apex',
+    storageBucket: 'corim-apex.firebasestorage.app',
+  );
+
+  static const FirebaseOptions androidDev = FirebaseOptions(
+    apiKey: 'AIzaSyCNmp5HOJ-_hd73SVUtKrKkXQameIfSSr8',
+    appId: '1:1052779949245:android:eea7d6934a615d50c45bd4',
     messagingSenderId: '1052779949245',
     projectId: 'corim-apex',
     storageBucket: 'corim-apex.firebasestorage.app',

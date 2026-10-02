@@ -1,0 +1,17 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "Corim Dev",
+      "request": "launch",
+      "type": "dart",
+      "args": ["--flavor", "dev"]
+    },
+    {
+      "name": "Corim Prod",
+      "request": "launch",
+      "type": "dart",
+      "args": ["--flavor", "prod"]
+    }
+  ]
+}

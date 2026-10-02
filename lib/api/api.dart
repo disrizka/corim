@@ -1,9 +1,15 @@
+import 'package:flutter/services.dart' show appFlavor;
+
 class ApiConfig {
-  static const String baseUrl = "https://corim-api.eon.id/";
-  // static const String baseUrl = "https://api.corimgroup.com/";
+  static bool get isProd => appFlavor == 'prod';
+  static bool get isDev => !isProd;
+
+  static String get baseUrl =>
+      isProd ? "https://api.corimgroup.com/" : "https://corim-api.eon.id/";
+
   static const String contentTypeJson = "application/json";
 
-  static const String storageBaseUrl = '${baseUrl}storage/';
+  static String get storageBaseUrl => '${baseUrl}storage/';
 }
 
 class Endpoints {

@@ -34,11 +34,24 @@ android {
     }
 
     defaultConfig {
-        applicationId = "com.corim.apexdev"
         minSdk = flutter.minSdkVersion
         targetSdk = flutter.targetSdkVersion
         versionCode = flutter.versionCode
         versionName = flutter.versionName
+    }
+
+    flavorDimensions += "env"
+    productFlavors {
+        create("dev") {
+            dimension = "env"
+            applicationId = "com.corim.apexdev"
+            resValue("string", "app_name", "Corim Apex Dev")
+        }
+        create("prod") {
+            dimension = "env"
+            applicationId = "com.corim.apex"
+            resValue("string", "app_name", "Corim Apex")
+        }
     }
 
     signingConfigs {
