@@ -68,7 +68,8 @@ dev_dependencies:
 flutter_launcher_icons:
   android: true
   ios: true
-  image_path: "assets/images/Corim_Apex_logo.jpg"
+  image_path: "assets/images/logo.jpg"
+  image_path_ios: "assets/images/logo.jpg"
 # The following section is specific to Flutter packages.
 flutter:
 
