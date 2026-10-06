@@ -1,6 +1,8 @@
 import 'package:corim/admin/home/greeting_provider.dart';
 import 'package:corim/auth/auth_provider.dart';
 import 'package:corim/crm/menu_screen.dart';
+import 'package:corim/finance/entity_model.dart';
+import 'package:corim/finance/entity_provider.dart';
 import 'package:corim/finance/finance_menu_screen.dart';
 import 'package:corim/main_button_nav.dart';
 import 'package:corim/notifications/notifcation_screen.dart';
@@ -61,8 +63,8 @@ class HomeScreen extends ConsumerStatefulWidget {
 
 class _HomeScreenState extends ConsumerState<HomeScreen> {
   _HomeFilter _filter = _HomeFilter.all;
+  EntityItem? _entityFilter;
   final _searchController = TextEditingController();
-  int _requestListPage = 1;
   static const double _bottomNavReservedHeight = 16 + 56 + 16;
 
   @override
@@ -89,6 +91,20 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
         n.clientName.toLowerCase().contains(q) ||
         n.requestedBy.toLowerCase().contains(q);
   }
+
+  /// Notifications only carry the entity as a raw string (name or code
+  /// depending on the backend payload), so match against either field of
+  /// the selected entity from `GET /entities`.
+  bool _matchesEntity(NotificationItem n) {
+    final selected = _entityFilter;
+    if (selected == null) return true;
+    final value = n.entity.trim().toLowerCase();
+    return value == selected.name.trim().toLowerCase() ||
+        value == selected.code.trim().toLowerCase();
+  }
+
+  bool _matchesFilters(NotificationItem n) =>
+      _filter.matches(n) && _matchesEntity(n);
 
   void _showComingSoon(String feature) {
     showDialog(
@@ -305,7 +321,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
 
   Widget _buildRequestListHeader() {
     return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 16, 16, 12),
+      padding: const EdgeInsets.fromLTRB(10, 16, 10, 12),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -319,6 +335,8 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
           ),
           const SizedBox(height: 12),
           _buildFilterChips(),
+          const SizedBox(height: 8),
+          _buildEntityFilterChips(),
           const SizedBox(height: 12),
           _buildSearchBar(),
         ],
@@ -328,23 +346,27 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
 
   Widget _buildRequestListBody() {
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 16),
-      child: Padding(
-        padding: const EdgeInsets.only(bottom: _bottomNavReservedHeight),
-        child: NotificationPageView(
-          cardBuilder: (context, item) => Padding(
-            padding: const EdgeInsets.only(bottom: 12),
-            child: _buildRequestCard(item),
-          ),
-          filter: _filter.matches,
-          searchQuery: _searchController.text,
-          searchMatcher: _matchesSearch,
-          sortRank: (n) => n.isPending ? 0 : 1,
-          onPageChanged: (page) => setState(() => _requestListPage = page),
-          emptyBuilder: (context) => _buildEmptyState(),
-          emptyFilterBuilder: (context, hasSearch) => _buildEmptyFilterState(),
-          errorBuilder: (context, err) => _buildErrorState(err),
+      padding: const EdgeInsets.symmetric(horizontal: 10),
+      child: NotificationInfiniteListView(
+        // jarak bawah di dalam list, bukan di luar list,
+        // supaya list tetap tampil sampai ke bawah layar (di belakang nav)
+        listPadding: const EdgeInsets.fromLTRB(
+          16,
+          16,
+          16,
+          _bottomNavReservedHeight + 24,
         ),
+        cardBuilder: (context, item) => Padding(
+          padding: const EdgeInsets.only(bottom: 12),
+          child: _buildRequestCard(item),
+        ),
+        filter: _matchesFilters,
+        searchQuery: _searchController.text,
+        searchMatcher: _matchesSearch,
+        sortRank: (n) => n.isPending ? 0 : 1,
+        emptyBuilder: (context) => _buildEmptyState(),
+        emptyFilterBuilder: (context, hasSearch) => _buildEmptyFilterState(),
+        errorBuilder: (context, err) => _buildErrorState(err),
       ),
     );
   }
@@ -408,6 +430,76 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     );
   }
 
+  /// Entity filter chips, sourced from the same `GET /entities` list used
+  /// by the expense request filter, so both screens stay in sync.
+  Widget _buildEntityFilterChips() {
+    final entities = ref.watch(entityOptionsProvider);
+    if (entities.isEmpty) return const SizedBox.shrink();
+
+    return SingleChildScrollView(
+      scrollDirection: Axis.horizontal,
+      child: Row(
+        // children: [
+        //   _entityChip(
+        //     label: 'All Entities',
+        //     isActive: _entityFilter == null,
+        //     onTap: () => setState(() => _entityFilter = null),
+        //   ),
+        //   for (final e in entities)
+        //     Padding(
+        //       padding: const EdgeInsets.only(left: 8),
+        //       child: _entityChip(
+        //         label: e.displayLabel,
+        //         isActive: _entityFilter?.id == e.id,
+        //         onTap: () => setState(() => _entityFilter = e),
+        //       ),
+        //     ),
+        // ],
+      ),
+    );
+  }
+
+  // Widget _entityChip({
+  //   required String label,
+  //   required bool isActive,
+  //   required VoidCallback onTap,
+  // }) {
+  //   return GestureDetector(
+  //     onTap: onTap,
+  //     child: Container(
+  //       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
+  //       decoration: BoxDecoration(
+  //         color: isActive ? const Color(0xFFEEF2FF) : Colors.transparent,
+  //         border: Border.all(
+  //           color: isActive ? const Color(0xFF0824A0) : const Color(0xFFCCCCCC),
+  //         ),
+  //         borderRadius: BorderRadius.circular(20),
+  //       ),
+  //       child: Row(
+  //         mainAxisSize: MainAxisSize.min,
+  //         children: [
+  //           Icon(
+  //             Icons.apartment_outlined,
+  //             size: 12,
+  //             color: isActive ? const Color(0xFF0824A0) : Colors.grey.shade600,
+  //           ),
+  //           const SizedBox(width: 4),
+  //           Text(
+  //             label,
+  //             style: TextStyle(
+  //               fontSize: 12,
+  //               fontWeight: FontWeight.w500,
+  //               color: isActive
+  //                   ? const Color(0xFF0824A0)
+  //                   : const Color(0xFF555555),
+  //             ),
+  //           ),
+  //         ],
+  //       ),
+  //     ),
+  //   );
+  // }
+
   Widget _buildSearchBar() {
     return Container(
       height: 44,
@@ -468,8 +560,8 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   Widget _buildEmptyFilterState() {
     final query = _searchController.text.trim();
     final message = query.isEmpty
-        ? 'No requests for "${_filter.label}" on page $_requestListPage'
-        : 'No requests match "$query" on page $_requestListPage';
+        ? 'No requests for "${_filter.label}"'
+        : 'No requests match "$query"';
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 32),
       child: Center(
@@ -516,6 +608,40 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     );
   }
 
+  Widget _buildEntityBadge(String entity) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      // decoration: BoxDecoration(
+      //   color: const Color(0xFFEEF2FF),
+      //   borderRadius: BorderRadius.circular(20),
+      // ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          // const Icon(
+          //   Icons.apartment_outlined,
+          //   size: 12,
+          //   color: Color(0xFF0824A0),
+          // ),
+          // const SizedBox(width: 4),
+          // ConstrainedBox(
+          //   constraints: const BoxConstraints(maxWidth: 90),
+          //   child: Text(
+          //     entity,
+          //     maxLines: 1,
+          //     overflow: TextOverflow.ellipsis,
+          //     style: const TextStyle(
+          //       fontSize: 11,
+          //       fontWeight: FontWeight.w600,
+          //       color: Color(0xFF0824A0),
+          //     ),
+          //   ),
+          // ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildRequestCard(NotificationItem n) {
     return Container(
       padding: const EdgeInsets.all(16),
@@ -544,14 +670,18 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                     width: 40,
                     height: 40,
                     decoration: BoxDecoration(
-                      color: const Color(0xFFEEF2FF),
+                      color: n.isExpenseRequest
+                          ? const Color(0xFFEEF2FF)
+                          : const Color(0xFFDCFCE7),
                       borderRadius: BorderRadius.circular(10),
                     ),
                     child: Icon(
                       n.isExpenseRequest
                           ? Icons.receipt_long_rounded
-                          : Icons.mail_outline_rounded,
-                      color: const Color(0xFF0824A0),
+                          : Icons.trending_up_rounded,
+                      color: n.isExpenseRequest
+                          ? const Color(0xFF0824A0)
+                          : const Color(0xFF16A34A),
                       size: 22,
                     ),
                   ),
@@ -571,39 +701,68 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                           ),
                         ),
                         const SizedBox(height: 2),
-                        Row(
+                        Wrap(
+                          spacing: 10,
+                          runSpacing: 2,
+                          crossAxisAlignment: WrapCrossAlignment.center,
                           children: [
-                            const Icon(
-                              Icons.access_time_rounded,
-                              size: 12,
-                              color: Colors.grey,
-                            ),
-                            const SizedBox(width: 4),
-                            Text(
-                              n.activityTime,
-                              style: const TextStyle(
-                                fontSize: 12,
-                                color: Colors.grey,
-                              ),
-                            ),
-                            if (n.files.isNotEmpty) ...[
-                              const SizedBox(width: 10),
-                              const Icon(
-                                Icons.attach_file_rounded,
-                                size: 12,
-                                color: Colors.grey,
-                              ),
-                              const SizedBox(width: 2),
-                              Text(
-                                n.files.length > 1
-                                    ? '${n.files.length} files'
-                                    : '1 file',
-                                style: const TextStyle(
-                                  fontSize: 12,
+                            Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                const Icon(
+                                  Icons.calendar_today_outlined,
+                                  size: 12,
                                   color: Colors.grey,
                                 ),
+                                const SizedBox(width: 4),
+                                Text(
+                                  n.activityDateId,
+                                  style: const TextStyle(
+                                    fontSize: 12,
+                                    color: Colors.grey,
+                                  ),
+                                ),
+                              ],
+                            ),
+                            Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                const Icon(
+                                  Icons.access_time_rounded,
+                                  size: 12,
+                                  color: Colors.grey,
+                                ),
+                                const SizedBox(width: 4),
+                                Text(
+                                  n.activityTimeShort,
+                                  style: const TextStyle(
+                                    fontSize: 12,
+                                    color: Colors.grey,
+                                  ),
+                                ),
+                              ],
+                            ),
+                            if (n.files.isNotEmpty)
+                              Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  const Icon(
+                                    Icons.attach_file_rounded,
+                                    size: 12,
+                                    color: Colors.grey,
+                                  ),
+                                  const SizedBox(width: 2),
+                                  Text(
+                                    n.files.length > 1
+                                        ? '${n.files.length} files'
+                                        : '1 file',
+                                    style: const TextStyle(
+                                      fontSize: 12,
+                                      color: Colors.grey,
+                                    ),
+                                  ),
+                                ],
                               ),
-                            ],
                           ],
                         ),
                       ],
@@ -623,75 +782,34 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
               const SizedBox(height: 12),
 
               Row(
+                crossAxisAlignment: CrossAxisAlignment.center,
                 children: [
                   Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
+                    child: Row(
                       children: [
-                        const Text(
-                          'Project Name',
-                          style: TextStyle(fontSize: 11, color: Colors.grey),
+                        const Icon(
+                          Icons.person_outline_rounded,
+                          size: 14,
+                          color: Color(0xFF555555),
                         ),
-                        const SizedBox(height: 4),
-                        Row(
-                          children: [
-                            const Icon(
-                              Icons.folder_outlined,
-                              size: 14,
-                              color: Color(0xFF555555),
+                        const SizedBox(width: 4),
+                        Expanded(
+                          child: Text(
+                            n.requestedBy,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w500,
+                              color: Color(0xFF222222),
                             ),
-                            const SizedBox(width: 4),
-                            Expanded(
-                              child: Text(
-                                n.projectName,
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                                style: const TextStyle(
-                                  fontSize: 12,
-                                  fontWeight: FontWeight.w500,
-                                  color: Color(0xFF222222),
-                                ),
-                              ),
-                            ),
-                          ],
+                          ),
                         ),
                       ],
                     ),
                   ),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        const Text(
-                          'Due Date',
-                          style: TextStyle(fontSize: 11, color: Colors.grey),
-                        ),
-                        const SizedBox(height: 4),
-                        Row(
-                          children: [
-                            const Icon(
-                              Icons.calendar_today_outlined,
-                              size: 14,
-                              color: Color(0xFF555555),
-                            ),
-                            const SizedBox(width: 4),
-                            Expanded(
-                              child: Text(
-                                '${n.activityDateId}, ${n.activityTime}',
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                                style: const TextStyle(
-                                  fontSize: 12,
-                                  fontWeight: FontWeight.w500,
-                                  color: Color(0xFF222222),
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ],
-                    ),
-                  ),
+                  const SizedBox(width: 8),
+                  _buildEntityBadge(n.entity),
                 ],
               ),
               const SizedBox(height: 14),

@@ -16,33 +16,94 @@ class ClientListScreen extends ConsumerStatefulWidget {
 class _ClientListScreenState extends ConsumerState<ClientListScreen> {
   ClientPhase _selectedPhase = ClientPhase.leads;
   String _query = '';
+  final ScrollController _scrollController = ScrollController();
+
+  @override
+  void initState() {
+    super.initState();
+    _scrollController.addListener(_onScroll);
+  }
+
+  @override
+  void dispose() {
+    _scrollController.removeListener(_onScroll);
+    _scrollController.dispose();
+    super.dispose();
+  }
+
+  void _onScroll() {
+    if (!_scrollController.hasClients) return;
+    final position = _scrollController.position;
+    // Panggil loadMore ketika scroll mendekati bagian bawah (sisa 300px)
+    if (position.pixels >= position.maxScrollExtent - 300) {
+      ref.read(clientListPagingProvider(_selectedPhase).notifier).loadMore();
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
-    final summary = ref.watch(clientPhaseSummaryProvider);
-    final clientsAsync = ref.watch(clientListProvider(_selectedPhase));
+    // Membaca summary total row per phase secara individual
+    final leadsCount = ref.watch(clientPhaseSummaryProvider(ClientPhase.leads));
+    final accountCount = ref.watch(
+      clientPhaseSummaryProvider(ClientPhase.account),
+    );
+    final stagesCount = ref.watch(
+      clientPhaseSummaryProvider(ClientPhase.stages),
+    );
+
+    // Membaca paging state untuk list phase yang aktif
+    final pagingState = ref.watch(clientListPagingProvider(_selectedPhase));
 
     return Scaffold(
       backgroundColor: const Color(0xFFF5F6FA),
       body: Stack(
         children: [
-          Column(
-            children: [
-              _buildHeader(context, summary),
-              Expanded(
-                child: SingleChildScrollView(
-                  padding: const EdgeInsets.only(bottom: 100),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const SizedBox(height: 16),
-                      _buildPhaseTabs(),
-                      _buildBodyList(clientsAsync),
-                    ],
+          RefreshIndicator(
+            onRefresh: () => ref
+                .read(clientListPagingProvider(_selectedPhase).notifier)
+                .refresh(),
+            child: CustomScrollView(
+              controller: _scrollController,
+              slivers: [
+                SliverToBoxAdapter(
+                  child: _buildHeader(
+                    context,
+                    leadsCount: leadsCount,
+                    accountCount: accountCount,
+                    stagesCount: stagesCount,
                   ),
                 ),
-              ),
-            ],
+                SliverToBoxAdapter(
+                  child: Padding(
+                    padding: const EdgeInsets.only(top: 16),
+                    child: _buildPhaseTabs(),
+                  ),
+                ),
+                SliverToBoxAdapter(
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text(
+                          'Client List Data',
+                          style: TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.w700,
+                            color: Color(0xFF1A1A2E),
+                          ),
+                        ),
+                        const SizedBox(height: 12),
+                        _buildSearchBar(),
+                        const SizedBox(height: 16),
+                      ],
+                    ),
+                  ),
+                ),
+                _buildBodySliver(pagingState),
+                const SliverToBoxAdapter(child: SizedBox(height: 100)),
+              ],
+            ),
           ),
           const Positioned(
             bottom: 16,
@@ -55,7 +116,12 @@ class _ClientListScreenState extends ConsumerState<ClientListScreen> {
     );
   }
 
-  Widget _buildHeader(BuildContext context, ClientPhaseSummary summary) {
+  Widget _buildHeader(
+    BuildContext context, {
+    required int? leadsCount,
+    required int? accountCount,
+    required int? stagesCount,
+  }) {
     return Container(
       decoration: const BoxDecoration(
         gradient: LinearGradient(
@@ -79,6 +145,15 @@ class _ClientListScreenState extends ConsumerState<ClientListScreen> {
                       Icons.arrow_back_ios_new_rounded,
                       color: Colors.white,
                       size: 20,
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  const Text(
+                    'Clients',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 18,
+                      fontWeight: FontWeight.w700,
                     ),
                   ),
                   const Spacer(),
@@ -127,11 +202,11 @@ class _ClientListScreenState extends ConsumerState<ClientListScreen> {
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                       children: [
-                        _buildStatItem(summary.leads, 'LEADS'),
+                        _buildStatItem(leadsCount, 'LEADS'),
                         _buildStatDivider(),
-                        _buildStatItem(summary.account, 'ACCOUNT'),
+                        _buildStatItem(accountCount, 'ACCOUNT'),
                         _buildStatDivider(),
-                        _buildStatItem(summary.stages, 'STAGES'),
+                        _buildStatItem(stagesCount, 'STAGES'),
                       ],
                     ),
                   ],
@@ -214,88 +289,94 @@ class _ClientListScreenState extends ConsumerState<ClientListScreen> {
     );
   }
 
-  Widget _buildBodyList(AsyncValue<ClientListResult> clientsAsync) {
-    return Padding(
-      padding: const EdgeInsets.all(16),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Text(
-            'Client List Data',
-            style: TextStyle(
-              fontSize: 18,
-              fontWeight: FontWeight.w700,
-              color: Color(0xFF1A1A2E),
+  Widget _buildBodySliver(ClientPagingState state) {
+    if (state.isInitialLoading) {
+      return const SliverToBoxAdapter(
+        child: Padding(
+          padding: EdgeInsets.symmetric(vertical: 40),
+          child: Center(child: CircularProgressIndicator()),
+        ),
+      );
+    }
+
+    if (state.error != null && state.items.isEmpty) {
+      return SliverToBoxAdapter(
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 40),
+          child: Center(
+            child: Text(
+              'Gagal memuat data: ${state.error}',
+              textAlign: TextAlign.center,
+              style: const TextStyle(color: Colors.redAccent, fontSize: 13),
             ),
           ),
-          const SizedBox(height: 12),
-          _buildSearchBar(),
-          const SizedBox(height: 16),
-          clientsAsync.when(
-            data: (result) {
-              final clients = result.clients;
-              final filtered = _query.isEmpty
-                  ? clients
-                  : clients
-                        .where(
-                          (c) => c.companyName.toLowerCase().contains(
-                            _query.toLowerCase(),
-                          ),
-                        )
-                        .toList();
+        ),
+      );
+    }
 
-              if (filtered.isEmpty) {
-                return const Padding(
-                  padding: EdgeInsets.symmetric(vertical: 40),
-                  child: Center(
-                    child: Text(
-                      'Tidak ada data ditemukan',
-                      style: TextStyle(color: Colors.grey, fontSize: 13),
+    final filtered = _query.isEmpty
+        ? state.items
+        : state.items
+              .where(
+                (c) =>
+                    c.companyName.toLowerCase().contains(_query.toLowerCase()),
+              )
+              .toList();
+
+    if (filtered.isEmpty) {
+      return const SliverToBoxAdapter(
+        child: Padding(
+          padding: EdgeInsets.symmetric(vertical: 40),
+          child: Center(
+            child: Text(
+              'Tidak ada data ditemukan',
+              style: TextStyle(color: Colors.grey, fontSize: 13),
+            ),
+          ),
+        ),
+      );
+    }
+
+    final showTrailingLoader =
+        _query.isEmpty && (state.isLoadingMore || state.hasMore);
+    final itemCount = filtered.length + (showTrailingLoader ? 1 : 0);
+
+    return SliverPadding(
+      padding: const EdgeInsets.symmetric(horizontal: 16),
+      sliver: SliverList(
+        delegate: SliverChildBuilderDelegate((context, index) {
+          if (index >= filtered.length) {
+            return const Padding(
+              padding: EdgeInsets.symmetric(vertical: 16),
+              child: Center(
+                child: SizedBox(
+                  width: 20,
+                  height: 20,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                ),
+              ),
+            );
+          }
+
+          final client = filtered[index];
+          return Padding(
+            padding: const EdgeInsets.only(bottom: 12),
+            child: GestureDetector(
+              onTap: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => ClientDetailScreen(
+                      clientId: client.id,
+                      companyName: client.companyName,
                     ),
                   ),
                 );
-              }
-
-              return Column(
-                children: filtered
-                    .map(
-                      (client) => Padding(
-                        padding: const EdgeInsets.only(bottom: 12),
-                        child: GestureDetector(
-                          onTap: () {
-                            Navigator.push(
-                              context,
-                              MaterialPageRoute(
-                                builder: (_) => ClientDetailScreen(
-                                  clientId: client.id,
-                                  companyName: client.companyName,
-                                ),
-                              ),
-                            );
-                          },
-                          child: _buildClientCard(client),
-                        ),
-                      ),
-                    )
-                    .toList(),
-              );
-            },
-            loading: () => const Padding(
-              padding: EdgeInsets.symmetric(vertical: 40),
-              child: Center(child: CircularProgressIndicator()),
+              },
+              child: _buildClientCard(client),
             ),
-            error: (err, st) => Padding(
-              padding: const EdgeInsets.symmetric(vertical: 40),
-              child: Center(
-                child: Text(
-                  'Gagal memuat data: $err',
-                  textAlign: TextAlign.center,
-                  style: const TextStyle(color: Colors.redAccent, fontSize: 13),
-                ),
-              ),
-            ),
-          ),
-        ],
+          );
+        }, childCount: itemCount),
       ),
     );
   }
@@ -316,7 +397,7 @@ class _ClientListScreenState extends ConsumerState<ClientListScreen> {
               style: const TextStyle(fontSize: 13),
               onChanged: (val) => setState(() => _query = val),
               decoration: const InputDecoration(
-                hintText: 'Search escalation, reimbursement, approval...',
+                hintText: 'Search client company name...',
                 hintStyle: TextStyle(color: Colors.grey, fontSize: 13),
                 border: InputBorder.none,
                 isDense: true,

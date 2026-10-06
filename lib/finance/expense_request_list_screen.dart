@@ -1,5 +1,7 @@
 import 'dart:async';
 
+import 'package:corim/finance/entity_model.dart';
+import 'package:corim/finance/entity_provider.dart';
 import 'package:corim/finance/expense_request_detail_screen.dart';
 import 'package:corim/finance/expense_request_model.dart';
 import 'package:corim/finance/expense_request_provider.dart';
@@ -18,13 +20,31 @@ class ExpenseRequestListScreen extends ConsumerStatefulWidget {
 class _ExpenseRequestListScreenState
     extends ConsumerState<ExpenseRequestListScreen> {
   final _searchController = TextEditingController();
+  final _scrollController = ScrollController();
   Timer? _debounce;
+  static const double _loadMoreThreshold = 240;
+
+  @override
+  void initState() {
+    super.initState();
+    _scrollController.addListener(_onScroll);
+  }
 
   @override
   void dispose() {
     _debounce?.cancel();
     _searchController.dispose();
+    _scrollController.removeListener(_onScroll);
+    _scrollController.dispose();
     super.dispose();
+  }
+
+  void _onScroll() {
+    if (!_scrollController.hasClients) return;
+    final position = _scrollController.position;
+    if (position.pixels >= position.maxScrollExtent - _loadMoreThreshold) {
+      ref.read(expenseRequestListProvider.notifier).loadMore();
+    }
   }
 
   void _onSearchChanged(String value) {
@@ -37,9 +57,225 @@ class _ExpenseRequestListScreenState
     setState(() {});
   }
 
+  Future<void> _openFilterSheet() async {
+    final notifier = ref.read(expenseRequestListProvider.notifier);
+    final state = ref.read(expenseRequestListProvider);
+    var draft = state.filter;
+
+    // Prefer the real `GET /entities` list so every entity shows up in the
+    // filter, not just the ones that happen to be present on the requests
+    // already loaded on screen. Fall back to whatever entities we've seen
+    // in the loaded items if that list hasn't loaded yet.
+    final fetchedEntities = ref.read(entityOptionsProvider);
+    final entityOptions = fetchedEntities.isNotEmpty
+        ? fetchedEntities
+        : (state.knownEntities.values
+              .map((e) => EntityItem(id: e.id, code: e.code, name: e.name))
+              .toList()
+            ..sort((a, b) => a.name.compareTo(b.name)));
+
+    await showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (context) {
+        return StatefulBuilder(
+          builder: (context, setSheetState) {
+            return Padding(
+              padding: EdgeInsets.only(
+                left: 20,
+                right: 20,
+                top: 16,
+                bottom: MediaQuery.of(context).viewInsets.bottom + 20,
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      const Expanded(
+                        child: Text(
+                          'Filter',
+                          style: TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.w700,
+                            color: NotifColors.textPrimary,
+                          ),
+                        ),
+                      ),
+                      TextButton(
+                        onPressed: () => setSheetState(
+                          () => draft = const ExpenseRequestFilter(),
+                        ),
+                        child: const Text('Reset'),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  _buildFilterSection(
+                    title: 'Entity',
+                    child: Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
+                      children: [
+                        _filterChip(
+                          label: 'All',
+                          selected: draft.entityId.isEmpty,
+                          onTap: () => setSheetState(
+                            () => draft = draft.copyWith(entityId: ''),
+                          ),
+                        ),
+                        for (final e in entityOptions)
+                          _filterChip(
+                            label: e.displayLabel,
+                            selected: draft.entityId == e.id,
+                            onTap: () => setSheetState(
+                              () => draft = draft.copyWith(entityId: e.id),
+                            ),
+                          ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  _buildFilterSection(
+                    title: 'Status',
+                    child: Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
+                      children: [
+                        for (final s in const [
+                          ('', 'All'),
+                          ('PENDING', 'Pending'),
+                          ('APPROVED', 'Approved'),
+                          ('REJECTED', 'Rejected'),
+                        ])
+                          _filterChip(
+                            label: s.$2,
+                            selected: draft.status == s.$1,
+                            onTap: () => setSheetState(
+                              () => draft = draft.copyWith(status: s.$1),
+                            ),
+                          ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  _buildFilterSection(
+                    title: 'Form Type',
+                    child: Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
+                      children: [
+                        for (final t in const ['', 'PRF', 'STB', 'SRF', 'SSR'])
+                          _filterChip(
+                            label: t.isEmpty ? 'All' : expenseFormTypeLabel(t),
+                            selected: draft.formType == t,
+                            onTap: () => setSheetState(
+                              () => draft = draft.copyWith(formType: t),
+                            ),
+                          ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 24),
+                  SizedBox(
+                    width: double.infinity,
+                    height: 46,
+                    child: DecoratedBox(
+                      decoration: BoxDecoration(
+                        gradient: NotifColors.brandGradient,
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      child: ElevatedButton(
+                        onPressed: () {
+                          notifier.applyFilter(draft);
+                          Navigator.pop(context);
+                        },
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.transparent,
+                          foregroundColor: Colors.white,
+                          shadowColor: Colors.transparent,
+                          elevation: 0,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                        ),
+                        child: const Text(
+                          'Apply Filter',
+                          style: TextStyle(
+                            fontSize: 14,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+
+  Widget _buildFilterSection({required String title, required Widget child}) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          title,
+          style: const TextStyle(
+            fontSize: 12.5,
+            fontWeight: FontWeight.w700,
+            color: NotifColors.textMuted,
+          ),
+        ),
+        const SizedBox(height: 8),
+        child,
+      ],
+    );
+  }
+
+  Widget _filterChip({
+    required String label,
+    required bool selected,
+    required VoidCallback onTap,
+  }) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+        decoration: BoxDecoration(
+          gradient: selected ? NotifColors.brandGradient : null,
+          color: selected ? null : Colors.white,
+          border: Border.all(
+            color: selected ? Colors.transparent : const Color(0xFFCCCCCC),
+          ),
+          borderRadius: BorderRadius.circular(20),
+        ),
+        child: Text(
+          label,
+          style: TextStyle(
+            fontSize: 12.5,
+            fontWeight: FontWeight.w500,
+            color: selected ? Colors.white : const Color(0xFF555555),
+          ),
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final state = ref.watch(expenseRequestListProvider);
+    // Kick off (and keep cached) the entities fetch as soon as this screen
+    // is shown, so it's ready by the time the filter sheet opens.
+    ref.watch(entityListProvider);
 
     return Scaffold(
       backgroundColor: NotifColors.background,
@@ -52,23 +288,24 @@ class _ExpenseRequestListScreenState
                 color: NotifColors.gradientEnd,
                 onRefresh: () =>
                     ref.read(expenseRequestListProvider.notifier).refresh(),
-                child: SingleChildScrollView(
+                child: CustomScrollView(
+                  controller: _scrollController,
                   physics: const AlwaysScrollableScrollPhysics(),
-                  padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      _buildSearchBar(),
-                      const SizedBox(height: 16),
-                      _buildContent(state),
-                      if (!state.isLoading &&
-                          state.error == null &&
-                          state.items.isNotEmpty) ...[
-                        const SizedBox(height: 16),
-                        _buildPager(state),
-                      ],
-                    ],
-                  ),
+                  slivers: [
+                    SliverToBoxAdapter(
+                      child: Padding(
+                        padding: const EdgeInsets.fromLTRB(16, 16, 16, 12),
+                        child: Row(
+                          children: [
+                            Expanded(child: _buildSearchBar()),
+                            const SizedBox(width: 10),
+                            _buildFilterButton(state),
+                          ],
+                        ),
+                      ),
+                    ),
+                    _buildContentSliver(state),
+                  ],
                 ),
               ),
             ),
@@ -78,32 +315,145 @@ class _ExpenseRequestListScreenState
     );
   }
 
-  Widget _buildContent(ExpenseRequestListState state) {
-    if (state.isLoading) {
-      return const Padding(
-        padding: EdgeInsets.symmetric(vertical: 48),
+  Widget _buildFilterButton(ExpenseRequestListState state) {
+    final active = state.filter.hasActiveFilters;
+    return GestureDetector(
+      onTap: _openFilterSheet,
+      child: Stack(
+        clipBehavior: Clip.none,
+        children: [
+          Container(
+            width: 44,
+            height: 44,
+            alignment: Alignment.center,
+            decoration: BoxDecoration(
+              color: active ? const Color(0xFFEAF2FF) : Colors.white,
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(
+                color: active
+                    ? const Color(0xFF2563EB)
+                    : const Color(0xFFE0E0E0),
+              ),
+            ),
+            child: Icon(
+              Icons.tune_rounded,
+              size: 20,
+              color: active ? const Color(0xFF2563EB) : Colors.grey.shade600,
+            ),
+          ),
+          if (active)
+            Positioned(
+              right: -2,
+              top: -2,
+              child: Container(
+                width: 10,
+                height: 10,
+                decoration: const BoxDecoration(
+                  color: Color(0xFFDC2626),
+                  shape: BoxShape.circle,
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildContentSliver(ExpenseRequestListState state) {
+    if (state.isLoading && state.items.isEmpty) {
+      return const SliverFillRemaining(
+        hasScrollBody: false,
         child: Center(
           child: CircularProgressIndicator(color: NotifColors.gradientEnd),
         ),
       );
     }
 
-    if (state.error != null) {
-      return _buildErrorState(state.error!);
+    if (state.error != null && state.items.isEmpty) {
+      return SliverFillRemaining(
+        hasScrollBody: false,
+        child: _buildErrorState(state.error!),
+      );
     }
 
     if (state.items.isEmpty) {
-      return _buildEmptyState(state.filter.search);
+      return SliverFillRemaining(
+        hasScrollBody: false,
+        child: _buildEmptyState(state.filter.search),
+      );
     }
 
-    return Column(
-      children: [
-        for (final item in state.items) ...[
-          _ExpenseRequestCard(item: item),
-          const SizedBox(height: 12),
-        ],
-      ],
+    // The list API doesn't include an `entity` object per item (only the
+    // detail endpoint does). When a single entity is selected in the
+    // filter, every visible item necessarily belongs to it, so we can
+    // still show a correct badge by resolving the filter's entityId
+    // against the entities we fetched from `GET /entities`.
+    final filterEntity = state.filter.entityId.isEmpty
+        ? null
+        : ref.watch(entityByIdProvider)[state.filter.entityId];
+
+    return SliverPadding(
+      padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
+      sliver: SliverList(
+        delegate: SliverChildBuilderDelegate((context, index) {
+          if (index < state.items.length) {
+            return Padding(
+              padding: const EdgeInsets.only(bottom: 12),
+              child: _ExpenseRequestCard(
+                item: state.items[index],
+                fallbackEntity: filterEntity,
+              ),
+            );
+          }
+          return _buildListFooter(state);
+        }, childCount: state.items.length + 1),
+      ),
     );
+  }
+
+  Widget _buildListFooter(ExpenseRequestListState state) {
+    if (state.loadMoreError != null) {
+      return Padding(
+        padding: const EdgeInsets.symmetric(vertical: 16),
+        child: Center(
+          child: TextButton(
+            onPressed: () =>
+                ref.read(expenseRequestListProvider.notifier).loadMore(),
+            child: const Text('Retry loading more'),
+          ),
+        ),
+      );
+    }
+
+    if (state.isLoadingMore) {
+      return const Padding(
+        padding: EdgeInsets.symmetric(vertical: 20),
+        child: Center(
+          child: SizedBox(
+            width: 22,
+            height: 22,
+            child: CircularProgressIndicator(
+              strokeWidth: 2.4,
+              color: NotifColors.gradientEnd,
+            ),
+          ),
+        ),
+      );
+    }
+
+    if (!state.hasNextPage) {
+      return Padding(
+        padding: const EdgeInsets.symmetric(vertical: 16),
+        child: Center(
+          child: Text(
+            '${state.meta.totalRows} total requests',
+            style: TextStyle(fontSize: 11.5, color: Colors.grey.shade500),
+          ),
+        ),
+      );
+    }
+
+    return const SizedBox(height: 4);
   }
 
   Widget _buildAppBar(BuildContext context) {
@@ -184,59 +534,6 @@ class _ExpenseRequestListScreenState
               padding: EdgeInsets.only(right: 12),
               child: Icon(Icons.search, color: Colors.grey, size: 20),
             ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildPager(ExpenseRequestListState state) {
-    final meta = state.meta;
-    return Container(
-      padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 4),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: NotifColors.cardBorder),
-      ),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          IconButton(
-            iconSize: 20,
-            visualDensity: VisualDensity.compact,
-            onPressed: state.hasPrevPage
-                ? () => ref.read(expenseRequestListProvider.notifier).prevPage()
-                : null,
-            icon: const Icon(Icons.chevron_left_rounded),
-          ),
-          Expanded(
-            child: Column(
-              children: [
-                Text(
-                  'Page ${meta.currentPage} of ${meta.totalPages}',
-                  textAlign: TextAlign.center,
-                  style: const TextStyle(
-                    fontSize: 12.5,
-                    fontWeight: FontWeight.w600,
-                    color: Color(0xFF555555),
-                  ),
-                ),
-                Text(
-                  '${meta.totalRows} total requests',
-                  textAlign: TextAlign.center,
-                  style: TextStyle(fontSize: 11, color: Colors.grey.shade500),
-                ),
-              ],
-            ),
-          ),
-          IconButton(
-            iconSize: 20,
-            visualDensity: VisualDensity.compact,
-            onPressed: state.hasNextPage
-                ? () => ref.read(expenseRequestListProvider.notifier).nextPage()
-                : null,
-            icon: const Icon(Icons.chevron_right_rounded),
-          ),
         ],
       ),
     );
@@ -324,8 +621,12 @@ class _ExpenseRequestListScreenState
 
 class _ExpenseRequestCard extends StatelessWidget {
   final ExpenseRequestItem item;
+  // Resolved entity to fall back to when the list API didn't send one for
+  // this item (see the note in `_buildContentSliver`). Null when no single
+  // entity is selected in the filter, in which case the badge is hidden.
+  final EntityItem? fallbackEntity;
 
-  const _ExpenseRequestCard({required this.item});
+  const _ExpenseRequestCard({required this.item, this.fallbackEntity});
 
   void _openDetail(BuildContext context) {
     Navigator.push(
@@ -365,27 +666,12 @@ class _ExpenseRequestCard extends StatelessWidget {
                 Row(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const NotifIconChip(
-                      icon: Icons.receipt_long_rounded,
-                      background: Color(0xFFEAF2FF),
-                      foreground: Color(0xFF2563EB),
-                    ),
+                    _buildTypeIcon(),
                     const SizedBox(width: 12),
                     Expanded(
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Row(
-                            children: [
-                              _FormTypeBadge(formType: item.formType),
-                              const SizedBox(width: 6),
-                              NotifStatusBadge(
-                                status: item.status,
-                                dense: true,
-                              ),
-                            ],
-                          ),
-                          const SizedBox(height: 6),
                           Text(
                             item.requestNumber,
                             maxLines: 1,
@@ -396,9 +682,30 @@ class _ExpenseRequestCard extends StatelessWidget {
                               color: NotifColors.textPrimary,
                             ),
                           ),
+                          const SizedBox(height: 4),
+                          Row(
+                            children: [
+                              Icon(
+                                Icons.access_time_rounded,
+                                size: 12,
+                                color: Colors.grey.shade500,
+                              ),
+                              const SizedBox(width: 3),
+                              Text(
+                                '${item.createdDatePart} ${item.createdTimePart}'
+                                    .trim(),
+                                style: TextStyle(
+                                  fontSize: 11.5,
+                                  color: Colors.grey.shade500,
+                                ),
+                              ),
+                            ],
+                          ),
                         ],
                       ),
                     ),
+                    const SizedBox(width: 8),
+                    NotifStatusBadge(status: item.status, dense: true),
                   ],
                 ),
                 const SizedBox(height: 10),
@@ -412,97 +719,62 @@ class _ExpenseRequestCard extends StatelessWidget {
                     height: 1.4,
                   ),
                 ),
-                const SizedBox(height: 14),
+                const SizedBox(height: 12),
                 Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
+                  crossAxisAlignment: CrossAxisAlignment.center,
                   children: [
                     Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
+                      child: Row(
                         children: [
-                          const Text(
-                            'Amount',
-                            style: TextStyle(fontSize: 11, color: Colors.grey),
+                          const Icon(
+                            Icons.person_outline_rounded,
+                            size: 14,
+                            color: Color(0xFF555555),
                           ),
-                          const SizedBox(height: 4),
-                          Row(
-                            children: [
-                              const Icon(
-                                Icons.payments_outlined,
-                                size: 14,
-                                color: Color(0xFF555555),
+                          const SizedBox(width: 4),
+                          Expanded(
+                            child: Text(
+                              item.createdBy,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(
+                                fontSize: 12,
+                                fontWeight: FontWeight.w500,
+                                color: Color(0xFF222222),
                               ),
-                              const SizedBox(width: 4),
-                              Expanded(
-                                child: Text(
-                                  item.formattedAmount,
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                  style: const TextStyle(
-                                    fontSize: 12,
-                                    fontWeight: FontWeight.w700,
-                                    color: Color(0xFF222222),
-                                  ),
-                                ),
-                              ),
-                            ],
+                            ),
                           ),
                         ],
                       ),
                     ),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          const Text(
-                            'Requested By',
-                            style: TextStyle(fontSize: 11, color: Colors.grey),
+                    const SizedBox(width: 8),
+                    Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Icon(
+                          Icons.payments_outlined,
+                          size: 14,
+                          color: Color(0xFF0824A0),
+                        ),
+                        const SizedBox(width: 4),
+                        Text(
+                          formatRupiahExpense(item.amount),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                            fontSize: 12.5,
+                            fontWeight: FontWeight.w700,
+                            color: Color(0xFF0824A0),
                           ),
-                          const SizedBox(height: 4),
-                          Row(
-                            children: [
-                              const Icon(
-                                Icons.person_outline_rounded,
-                                size: 14,
-                                color: Color(0xFF555555),
-                              ),
-                              const SizedBox(width: 4),
-                              Expanded(
-                                child: Text(
-                                  item.createdBy,
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                  style: const TextStyle(
-                                    fontSize: 12,
-                                    fontWeight: FontWeight.w500,
-                                    color: Color(0xFF222222),
-                                  ),
-                                ),
-                              ),
-                            ],
-                          ),
-                        ],
-                      ),
+                        ),
+                      ],
                     ),
                   ],
                 ),
-                const SizedBox(height: 4),
-                Row(
-                  children: [
-                    Icon(
-                      Icons.access_time_rounded,
-                      size: 12,
-                      color: Colors.grey.shade500,
-                    ),
-                    const SizedBox(width: 3),
-                    Text(
-                      '${item.createdDatePart} ${item.createdTimePart}'.trim(),
-                      style: TextStyle(
-                        fontSize: 11.5,
-                        color: Colors.grey.shade500,
-                      ),
-                    ),
-                  ],
+                const SizedBox(height: 10),
+                _EntityBadge(
+                  code: item.entity?.code ?? fallbackEntity?.code,
+                  name: item.entity?.name ?? fallbackEntity?.name,
                 ),
                 const SizedBox(height: 14),
                 SizedBox(
@@ -541,28 +813,97 @@ class _ExpenseRequestCard extends StatelessWidget {
       ),
     );
   }
+
+  /// Icon chip with the form type (PRF/STB/SRF/SSR) shown as a small badge
+  /// on its corner, so the type indicator lives on the icon itself instead
+  /// of a separate pill in the header.
+  Widget _buildTypeIcon() {
+    return Stack(
+      clipBehavior: Clip.none,
+      children: [
+        const NotifIconChip(
+          icon: Icons.receipt_long_rounded,
+          background: Color(0xFFEAF2FF),
+          foreground: Color(0xFF2563EB),
+        ),
+        Positioned(
+          right: -6,
+          bottom: -6,
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
+            decoration: BoxDecoration(
+              color: const Color(0xFF2563EB),
+              borderRadius: BorderRadius.circular(6),
+              border: Border.all(color: Colors.white, width: 1.5),
+            ),
+            child: Text(
+              expenseFormTypeLabel(item.formType),
+              style: const TextStyle(
+                fontSize: 8,
+                fontWeight: FontWeight.w800,
+                letterSpacing: 0.2,
+                color: Colors.white,
+              ),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
 }
 
-class _FormTypeBadge extends StatelessWidget {
-  final String formType;
+class _EntityBadge extends StatelessWidget {
+  final String? code;
+  final String? name;
 
-  const _FormTypeBadge({required this.formType});
+  const _EntityBadge({this.code, this.name});
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
-      decoration: BoxDecoration(
-        color: const Color(0xFFEAF2FF),
-        borderRadius: BorderRadius.circular(20),
-      ),
-      child: Text(
-        expenseFormTypeLabel(formType),
-        style: const TextStyle(
-          fontSize: 10,
-          fontWeight: FontWeight.w800,
-          letterSpacing: 0.3,
-          color: Color(0xFF2563EB),
+    final resolvedName = name;
+    if (resolvedName == null || resolvedName.isEmpty || resolvedName == '-') {
+      // No entity info available for this item (list API doesn't send one,
+      // and no single-entity filter is active to fall back on) — hide the
+      // badge instead of showing a misleading "-".
+      return const SizedBox.shrink();
+    }
+    final resolvedCode = code;
+    final label =
+        (resolvedCode != null && resolvedCode.isNotEmpty && resolvedCode != '-')
+        ? '$resolvedCode - $resolvedName'
+        : resolvedName;
+
+    return Align(
+      alignment: Alignment.centerLeft,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
+        decoration: BoxDecoration(
+          color: const Color(0xFFEEF2FF),
+          borderRadius: BorderRadius.circular(20),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Icon(
+              Icons.apartment_outlined,
+              size: 13,
+              color: Color(0xFF0824A0),
+            ),
+            const SizedBox(width: 4),
+            ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 160),
+              child: Text(
+                label,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(
+                  fontSize: 11.5,
+                  fontWeight: FontWeight.w600,
+                  color: Color(0xFF0824A0),
+                ),
+              ),
+            ),
+          ],
         ),
       ),
     );

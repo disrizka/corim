@@ -85,7 +85,7 @@ class AuthNotifier extends Notifier<AuthState> {
     try {
       final accessToken = await _storage.read(key: StorageKeys.accessToken);
       final refreshToken = await _storage.read(key: StorageKeys.refreshToken);
-      final name = await _storage.read(key: StorageKeys.userName); 
+      final name = await _storage.read(key: StorageKeys.userName);
 
       if (accessToken == null || refreshToken == null) {
         print('[INIT] Tidak ada token > Login Screen');
@@ -101,7 +101,7 @@ class AuthNotifier extends Notifier<AuthState> {
         state = AuthState(
           accessToken: accessToken,
           isAuthenticated: true,
-          name: name, 
+          name: name,
         );
         return;
       }

@@ -35,12 +35,67 @@ String expenseTitleCase(String value) {
       .join(' ');
 }
 
+/// Extracts "HH:mm" from a timestamp string, handling both
+/// "YYYY-MM-DD HH:mm:ss" and ISO-8601 ("YYYY-MM-DDTHH:mm:ss.sssZ") formats
+/// (DateTime.tryParse understands both). Returns '' if it can't be parsed.
+String expenseTimeOf(String raw) {
+  final trimmed = raw.trim();
+  if (trimmed.isEmpty || trimmed == '-') return '';
+  final dt = DateTime.tryParse(trimmed);
+  if (dt == null) return '';
+  final local = dt.toLocal();
+  final hh = local.hour.toString().padLeft(2, '0');
+  final mm = local.minute.toString().padLeft(2, '0');
+  return '$hh:$mm';
+}
+
+const List<String> _expenseMonthNames = [
+  'January',
+  'February',
+  'March',
+  'April',
+  'May',
+  'June',
+  'July',
+  'August',
+  'September',
+  'October',
+  'November',
+  'December',
+];
+
+/// Formats any parseable timestamp ("YYYY-MM-DD HH:mm:ss", ISO-8601, etc.)
+/// into a readable "1 January 2025, 15:00" form — always without seconds.
+/// Falls back to the raw string (with any trailing ":ss" stripped) when it
+/// can't be parsed, so history/phase timestamps never show raw seconds.
+String expenseFormatDateTime(String raw) {
+  final trimmed = raw.trim();
+  if (trimmed.isEmpty || trimmed == '-') return trimmed;
+
+  final dt = DateTime.tryParse(trimmed);
+  if (dt != null) {
+    final local = dt.toLocal();
+    final hh = local.hour.toString().padLeft(2, '0');
+    final mm = local.minute.toString().padLeft(2, '0');
+    return '${local.day} ${_expenseMonthNames[local.month - 1]} '
+        '${local.year}, $hh:$mm';
+  }
+
+  // Couldn't parse (e.g. already backend-formatted) — just drop a trailing
+  // ":ss" seconds component if there is one, so it's still readable.
+  return trimmed.replaceFirstMapped(
+    RegExp(r'(\d{1,2}:\d{2}):\d{2}'),
+    (m) => m.group(1)!,
+  );
+}
+
 class ExpenseRequestItem {
   final String id;
   final num amount;
   final bool canResubmit;
   final String createdAt;
   final String createdBy;
+  final ExpenseEntityRef entity;
   final String formType;
   final List<ExpenseHistoryEntry> history;
   final String invoiceDate;
@@ -55,6 +110,7 @@ class ExpenseRequestItem {
     required this.canResubmit,
     required this.createdAt,
     required this.createdBy,
+    required this.entity,
     required this.formType,
     required this.history,
     required this.invoiceDate,
@@ -70,11 +126,7 @@ class ExpenseRequestItem {
   String get formattedAmount => formatRupiahExpense(amount);
   String get createdDatePart =>
       createdAt.contains(' ') ? createdAt.split(' ').first : createdAt;
-  String get createdTimePart {
-    if (!createdAt.contains(' ')) return '';
-    final time = createdAt.split(' ').last;
-    return time.length >= 5 ? time.substring(0, 5) : time;
-  }
+  String get createdTimePart => expenseTimeOf(createdAt);
 
   factory ExpenseRequestItem.fromJson(Map<String, dynamic> json) {
     final rawHistory = (json['history'] is List)
@@ -88,6 +140,7 @@ class ExpenseRequestItem {
       canResubmit: json['canResubmit'] == true,
       createdAt: (json['createdAt'] ?? '-').toString(),
       createdBy: (json['createdBy'] ?? '-').toString(),
+      entity: ExpenseEntityRef.fromJson(json['entity']),
       formType: (json['formType'] ?? '-').toString(),
       history: rawHistory
           .map(
@@ -140,12 +193,26 @@ class ExpenseNamedRef {
   const ExpenseNamedRef({required this.id, required this.name});
 
   factory ExpenseNamedRef.fromJson(dynamic json) {
-    if (json is! Map) return const ExpenseNamedRef(id: '', name: '-');
-    final map = Map<String, dynamic>.from(json);
-    return ExpenseNamedRef(
-      id: (map['id'] ?? '').toString(),
-      name: (map['name'] ?? '-').toString(),
-    );
+    // Backend kadang mengirim relasi ini sebagai object hasil populate
+    // ({"id": "...", "name": "..."}), tapi kadang cuma sebagai ID mentah
+    // (String) saat endpoint yang bersangkutan tidak melakukan populate.
+    // Kalau ini tidak ditangani, id jadi kebaca kosong walau sebenarnya
+    // request tetap punya project, sehingga tombol "Open Project" gagal
+    // secara tidak konsisten.
+    if (json is Map) {
+      final map = Map<String, dynamic>.from(json);
+      return ExpenseNamedRef(
+        id: (map['id'] ?? map['_id'] ?? '').toString(),
+        name: (map['name'] ?? '-').toString(),
+      );
+    }
+    if (json is String && json.trim().isNotEmpty) {
+      // Hanya berupa ID mentah (belum di-populate oleh backend).
+      // Tetap simpan id-nya supaya "Open Project" bisa jalan,
+      // meski nama project belum bisa ditampilkan di sini.
+      return ExpenseNamedRef(id: json.trim(), name: '-');
+    }
+    return const ExpenseNamedRef(id: '', name: '-');
   }
 }
 
@@ -176,6 +243,7 @@ class ExpenseItemLine {
   final num amount;
   final String dueDate;
   final String itemDescription;
+  final String operationExpense;
   final num qty;
   final num rate;
 
@@ -183,6 +251,7 @@ class ExpenseItemLine {
     required this.amount,
     required this.dueDate,
     required this.itemDescription,
+    this.operationExpense = '',
     required this.qty,
     required this.rate,
   });
@@ -197,12 +266,246 @@ class ExpenseItemLine {
           : num.tryParse('${json['amount']}') ?? 0,
       dueDate: (json['dueDate'] ?? '-').toString(),
       itemDescription: (json['itemDescription'] ?? '-').toString(),
+      operationExpense: (json['operationExpense'] ?? '').toString(),
       qty: (json['qty'] is num)
           ? json['qty'] as num
           : num.tryParse('${json['qty']}') ?? 0,
       rate: (json['rate'] is num)
           ? json['rate'] as num
           : num.tryParse('${json['rate']}') ?? 0,
+    );
+  }
+}
+
+/// Snapshot payload returned by
+/// `GET finance/expenses-employee/{id}/history/{snapshotId}` — the
+/// "DETAIL INFORMATION" popup shown on the web dashboard when a History
+/// row is opened: just the notes for that revision plus its item lines
+/// (each optionally tagged with an Operation Expense category, as seen on
+/// PRF/SRF/SSR forms).
+class ExpenseHistorySnapshotDetail {
+  final String notes;
+  final List<ExpenseItemLine> items;
+
+  const ExpenseHistorySnapshotDetail({
+    required this.notes,
+    required this.items,
+  });
+
+  factory ExpenseHistorySnapshotDetail.fromJson(Map<String, dynamic> json) {
+    // Backend may nest this under `detailInformation` (matching the shape
+    // of the main detail endpoint) or send `notes`/`items` at the top
+    // level — support both so this keeps working either way.
+    final detailInformation = (json['detailInformation'] is Map)
+        ? Map<String, dynamic>.from(json['detailInformation'] as Map)
+        : json;
+    final rawItems = (detailInformation['items'] is List)
+        ? detailInformation['items'] as List
+        : const [];
+
+    return ExpenseHistorySnapshotDetail(
+      notes: (json['notes'] ?? detailInformation['notes'] ?? '-').toString(),
+      items: rawItems
+          .map(
+            (e) =>
+                ExpenseItemLine.fromJson(Map<String, dynamic>.from(e as Map)),
+          )
+          .toList(),
+    );
+  }
+}
+
+/// A single line inside an STB settlement section (Air Ticket, Hotel
+/// Reservation, Rent Car/BBM/Toll, Tactical Funds, Meals, Coordination
+/// Funds). Not every section uses every field — e.g. Air Ticket has
+/// `detail`/`time`, while the per-day sections have `day`/`subTotal` — so
+/// this holds the union of fields and each renderer just reads what it
+/// needs.
+class ExpenseStbLine {
+  final num amount;
+  final num amountPerDay;
+  final String date;
+  final int day;
+  final String detail;
+  final String notes;
+  final num subTotal;
+  final String time;
+  final List<dynamic> uploadFile;
+
+  const ExpenseStbLine({
+    required this.amount,
+    required this.amountPerDay,
+    required this.date,
+    required this.day,
+    required this.detail,
+    required this.notes,
+    required this.subTotal,
+    required this.time,
+    required this.uploadFile,
+  });
+
+  /// The per-unit amount to display in an "Amount" column, whichever of
+  /// `amount` / `amountPerDay` the section actually populated.
+  num get displayAmount => amountPerDay != 0 ? amountPerDay : amount;
+
+  /// The line total. Sections that don't send `subTotal` (like Air Ticket)
+  /// just use `amount` directly.
+  num get displayTotal => subTotal != 0 ? subTotal : amount;
+
+  String get formattedAmount => formatRupiahExpense(displayAmount);
+  String get formattedTotal => formatRupiahExpense(displayTotal);
+
+  factory ExpenseStbLine.fromJson(Map<String, dynamic> json) {
+    num _num(dynamic v) => (v is num) ? v : num.tryParse('${v ?? ''}') ?? 0;
+    return ExpenseStbLine(
+      amount: _num(json['amount']),
+      amountPerDay: _num(json['amountPerDay']),
+      date: (json['date'] ?? '').toString(),
+      day: (json['day'] is num)
+          ? (json['day'] as num).toInt()
+          : int.tryParse('${json['day']}') ?? 0,
+      detail: (json['detail'] ?? '').toString(),
+      notes: (json['notes'] ?? '').toString(),
+      subTotal: _num(json['subTotal']),
+      time: (json['time'] ?? '').toString(),
+      uploadFile: (json['uploadFile'] is List)
+          ? json['uploadFile'] as List
+          : const [],
+    );
+  }
+}
+
+/// The "UPD" (Uang Perjalanan Dinas / per-diem) block of an STB request —
+/// a single amount-per-night entry rather than a list.
+class ExpenseStbUpd {
+  final num amount;
+  final int night;
+  final num subTotal;
+
+  const ExpenseStbUpd({
+    required this.amount,
+    required this.night,
+    required this.subTotal,
+  });
+
+  String get formattedAmount => formatRupiahExpense(amount);
+  String get formattedSubTotal => formatRupiahExpense(subTotal);
+
+  factory ExpenseStbUpd.fromJson(Map<String, dynamic> json) {
+    num _num(dynamic v) => (v is num) ? v : num.tryParse('${v ?? ''}') ?? 0;
+    return ExpenseStbUpd(
+      amount: _num(json['amount']),
+      night: (json['night'] is num)
+          ? (json['night'] as num).toInt()
+          : int.tryParse('${json['night']}') ?? 0,
+      subTotal: _num(json['subTotal']),
+    );
+  }
+}
+
+/// A single leg of the travel itinerary table (Date/Day/From/To/ETD/ETA).
+class ExpenseTravelLeg {
+  final String date;
+  final int day;
+  final String from;
+  final String to;
+  final String etd;
+  final String eta;
+
+  const ExpenseTravelLeg({
+    required this.date,
+    required this.day,
+    required this.from,
+    required this.to,
+    required this.etd,
+    required this.eta,
+  });
+
+  factory ExpenseTravelLeg.fromJson(Map<String, dynamic> json) {
+    return ExpenseTravelLeg(
+      date: (json['date'] ?? '-').toString(),
+      day: (json['day'] is num)
+          ? (json['day'] as num).toInt()
+          : int.tryParse('${json['day']}') ?? 0,
+      from: (json['from'] ?? '-').toString(),
+      to: (json['to'] ?? '-').toString(),
+      etd: (json['etd'] ?? '-').toString(),
+      eta: (json['eta'] ?? '-').toString(),
+    );
+  }
+}
+
+/// All the STB-specific (`formType == 'STB'`) sections of
+/// `detailInformation`, kept separate from the generic [ExpenseItemLine]
+/// list used by PRF/SRF/SSR.
+class ExpenseStbDetail {
+  final List<ExpenseStbLine> airTicket;
+  final List<ExpenseStbLine> coordinationFunds;
+  final List<ExpenseStbLine> hotelReservation;
+  final List<ExpenseStbLine> meals;
+  final List<ExpenseStbLine> rentCarBbmToll;
+  final List<ExpenseStbLine> tacticalFunds;
+  final num totalBudget;
+  final List<ExpenseTravelLeg> travelItinerary;
+  final ExpenseStbUpd? upd;
+
+  const ExpenseStbDetail({
+    required this.airTicket,
+    required this.coordinationFunds,
+    required this.hotelReservation,
+    required this.meals,
+    required this.rentCarBbmToll,
+    required this.tacticalFunds,
+    required this.totalBudget,
+    required this.travelItinerary,
+    required this.upd,
+  });
+
+  bool get isEmpty =>
+      airTicket.isEmpty &&
+      coordinationFunds.isEmpty &&
+      hotelReservation.isEmpty &&
+      meals.isEmpty &&
+      rentCarBbmToll.isEmpty &&
+      tacticalFunds.isEmpty &&
+      upd == null;
+
+  factory ExpenseStbDetail.fromJson(Map<String, dynamic> json) {
+    List<ExpenseStbLine> _lines(String key) {
+      final raw = json[key];
+      if (raw is! List) return const [];
+      return raw
+          .map(
+            (e) => ExpenseStbLine.fromJson(Map<String, dynamic>.from(e as Map)),
+          )
+          .toList();
+    }
+
+    final rawUpd = json['upd'];
+    final rawTravel = json['travelItinerary'];
+
+    return ExpenseStbDetail(
+      airTicket: _lines('airTicket'),
+      coordinationFunds: _lines('coordinationFunds'),
+      hotelReservation: _lines('hotelReservation'),
+      meals: _lines('meals'),
+      rentCarBbmToll: _lines('rentCarBbmToll'),
+      tacticalFunds: _lines('tacticalFunds'),
+      totalBudget: (json['totalBudget'] is num)
+          ? json['totalBudget'] as num
+          : num.tryParse('${json['totalBudget']}') ?? 0,
+      travelItinerary: (rawTravel is List)
+          ? rawTravel
+                .map(
+                  (e) => ExpenseTravelLeg.fromJson(
+                    Map<String, dynamic>.from(e as Map),
+                  ),
+                )
+                .toList()
+          : const [],
+      upd: (rawUpd is Map)
+          ? ExpenseStbUpd.fromJson(Map<String, dynamic>.from(rawUpd))
+          : null,
     );
   }
 }
@@ -248,6 +551,23 @@ class ExpensePhase {
   }
 }
 
+bool _expenseCanApproveOf(Map<String, dynamic> json) {
+  final raw =
+      json['canApprove'] ??
+      json['canAction'] ??
+      json['isApprover'] ??
+      json['canReview'];
+  // No permission field from the backend yet → default to `true` so
+  // Approve/Reject keeps working for the user it's actually meant for.
+  // The backend already rejects unauthorized approve/reject attempts at
+  // the action endpoint (business-rule validation), so this default does
+  // not weaken security — it only affects whether the button is *shown*.
+  // As soon as the backend sends one of the keys above, only the real
+  // approver will see the button; everyone else keeps read-only access.
+  if (raw == null) return true;
+  return raw == true;
+}
+
 class ExpenseRequestDetail {
   final String id;
   final num amount;
@@ -261,6 +581,7 @@ class ExpenseRequestDetail {
   final ExpenseEntityRef entity;
   final List<dynamic> evidenceFile;
   final String formType;
+  final List<ExpenseHistoryEntry> history;
   final String invoiceDate;
   final String notes;
   final String operationExpense;
@@ -272,6 +593,11 @@ class ExpenseRequestDetail {
   final String status;
   final String updatedAt;
   final List<dynamic> uploadFile;
+  final ExpenseStbDetail? stb;
+  final String travelStartDate;
+  final String travelEndDate;
+  final String reasonForTravel;
+  final bool canApprove;
 
   const ExpenseRequestDetail({
     required this.id,
@@ -286,6 +612,7 @@ class ExpenseRequestDetail {
     required this.entity,
     required this.evidenceFile,
     required this.formType,
+    required this.history,
     required this.invoiceDate,
     required this.notes,
     required this.operationExpense,
@@ -297,13 +624,44 @@ class ExpenseRequestDetail {
     required this.status,
     required this.updatedAt,
     required this.uploadFile,
+    this.stb,
+    this.travelStartDate = '',
+    this.travelEndDate = '',
+    this.reasonForTravel = '',
+    this.canApprove = true,
   });
+
+  /// True when there's a travel itinerary worth showing (dates and/or a
+  /// reason were sent), independent of form type — STB always has this,
+  /// but other forms could too.
+  bool get hasTravelItinerary =>
+      travelStartDate.trim().isNotEmpty ||
+      travelEndDate.trim().isNotEmpty ||
+      reasonForTravel.trim().isNotEmpty ||
+      (stb?.travelItinerary.isNotEmpty ?? false);
 
   bool get isPending => status.toUpperCase() == 'PENDING';
   bool get isApproved => status.toUpperCase() == 'APPROVED';
   bool get isRejected => status.toUpperCase() == 'REJECTED';
 
+  /// True for form types whose "Items" tab should render as a settlement
+  /// (STB) instead of a simple item/qty/rate list (PRF/SRF/SSR).
+  bool get isSettlementForm => formType.toUpperCase() == 'STB';
+
   String get formattedAmount => formatRupiahExpense(amount);
+
+  /// Time portion of [createdAt], used to append a time to the otherwise
+  /// date-only [requestDate].
+  String get createdTimePart => expenseTimeOf(createdAt);
+
+  /// [requestDate] with the time appended, e.g. "12 August 2026, 15:00".
+  String get requestDateWithTime {
+    final time = createdTimePart;
+    if (time.isEmpty || requestDate.trim().isEmpty || requestDate == '-') {
+      return requestDate;
+    }
+    return '$requestDate, $time';
+  }
 
   List<dynamic> get allFiles => [...evidenceFile, ...uploadFile];
 
@@ -319,9 +677,22 @@ class ExpenseRequestDetail {
         ? json['phaseOfRequest'] as List
         : const [];
 
+    final rawHistory = (json['history'] is List)
+        ? json['history'] as List
+        : const [];
+
     final createdByUser = (json['createdByUser'] is Map)
         ? Map<String, dynamic>.from(json['createdByUser'] as Map)
         : <String, dynamic>{};
+
+    final rawDurationTravel = (json['durationTravel'] is Map)
+        ? Map<String, dynamic>.from(json['durationTravel'] as Map)
+        : <String, dynamic>{};
+
+    final formType = (json['formType'] ?? '-').toString();
+    final stb = (formType.toUpperCase() == 'STB')
+        ? ExpenseStbDetail.fromJson(detailInformation)
+        : null;
 
     return ExpenseRequestDetail(
       id: (json['id'] ?? '').toString(),
@@ -334,6 +705,10 @@ class ExpenseRequestDetail {
       createdBy: (json['createdBy'] ?? '-').toString(),
       createdByEmail: (createdByUser['email'] ?? '-').toString(),
       currentPhase: (json['currentPhase'] ?? '-').toString(),
+      stb: stb,
+      travelStartDate: (rawDurationTravel['startDate'] ?? '').toString(),
+      travelEndDate: (rawDurationTravel['endDate'] ?? '').toString(),
+      reasonForTravel: (json['reasonForTravel'] ?? '').toString(),
       items: rawItems
           .map(
             (e) =>
@@ -344,7 +719,14 @@ class ExpenseRequestDetail {
       evidenceFile: (json['evidenceFile'] is List)
           ? json['evidenceFile'] as List
           : const [],
-      formType: (json['formType'] ?? '-').toString(),
+      formType: formType,
+      history: rawHistory
+          .map(
+            (e) => ExpenseHistoryEntry.fromJson(
+              Map<String, dynamic>.from(e as Map),
+            ),
+          )
+          .toList(),
       invoiceDate: (json['invoiceDate'] ?? '').toString(),
       notes: (json['notes'] ?? '-').toString(),
       operationExpense: (json['operationExpense'] ?? '-').toString(),
@@ -364,6 +746,14 @@ class ExpenseRequestDetail {
       uploadFile: (json['uploadFile'] is List)
           ? json['uploadFile'] as List
           : const [],
+      // Whether the *current* logged-in user is allowed to approve/reject
+      // this request (as opposed to merely being allowed to view it).
+      // The backend should send this alongside the detail payload (any of
+      // the keys below); until it does, this defaults to `true` so nothing
+      // regresses — but as soon as the backend adds a real permission flag,
+      // the Approve/Reject bar will automatically only show for users who
+      // are actually allowed to act on it.
+      canApprove: _expenseCanApproveOf(json),
     );
   }
 }

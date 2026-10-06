@@ -17,22 +17,29 @@ class ExpenseRequestFilter {
   final String search;
   final String status;
   final String formType;
+  final String entityId;
 
   const ExpenseRequestFilter({
     this.search = '',
     this.status = '',
     this.formType = '',
+    this.entityId = '',
   });
+
+  bool get hasActiveFilters =>
+      status.isNotEmpty || formType.isNotEmpty || entityId.isNotEmpty;
 
   ExpenseRequestFilter copyWith({
     String? search,
     String? status,
     String? formType,
+    String? entityId,
   }) {
     return ExpenseRequestFilter(
       search: search ?? this.search,
       status: status ?? this.status,
       formType: formType ?? this.formType,
+      entityId: entityId ?? this.entityId,
     );
   }
 
@@ -41,10 +48,11 @@ class ExpenseRequestFilter {
       other is ExpenseRequestFilter &&
       other.search == search &&
       other.status == status &&
-      other.formType == formType;
+      other.formType == formType &&
+      other.entityId == entityId;
 
   @override
-  int get hashCode => Object.hash(search, status, formType);
+  int get hashCode => Object.hash(search, status, formType, entityId);
 }
 
 class ExpenseRequestPageMeta {
@@ -78,6 +86,8 @@ class ExpenseRequestListState {
   final bool isLoading;
   final bool isLoadingMore;
   final Object? error;
+  final Object? loadMoreError;
+  final Map<String, ExpenseEntityRef> knownEntities;
 
   const ExpenseRequestListState({
     this.items = const [],
@@ -86,6 +96,8 @@ class ExpenseRequestListState {
     this.isLoading = true,
     this.isLoadingMore = false,
     this.error,
+    this.loadMoreError,
+    this.knownEntities = const {},
   });
 
   bool get hasNextPage => meta.currentPage < meta.totalPages;
@@ -99,6 +111,9 @@ class ExpenseRequestListState {
     bool? isLoadingMore,
     Object? error,
     bool clearError = false,
+    Object? loadMoreError,
+    bool clearLoadMoreError = false,
+    Map<String, ExpenseEntityRef>? knownEntities,
   }) {
     return ExpenseRequestListState(
       items: items ?? this.items,
@@ -107,6 +122,10 @@ class ExpenseRequestListState {
       isLoading: isLoading ?? this.isLoading,
       isLoadingMore: isLoadingMore ?? this.isLoadingMore,
       error: clearError ? null : (error ?? this.error),
+      loadMoreError: clearLoadMoreError
+          ? null
+          : (loadMoreError ?? this.loadMoreError),
+      knownEntities: knownEntities ?? this.knownEntities,
     );
   }
 }
@@ -120,12 +139,31 @@ class ExpenseRequestListNotifier
     fetchPage(1);
   }
 
-  Future<void> fetchPage(int page) async {
-    state = state.copyWith(
-      isLoading: true,
-      isLoadingMore: false,
-      clearError: true,
-    );
+  Map<String, ExpenseEntityRef> _mergeKnownEntities(
+    List<ExpenseRequestItem> items,
+  ) {
+    final merged = Map<String, ExpenseEntityRef>.from(state.knownEntities);
+    for (final item in items) {
+      if (item.entity.id.isNotEmpty) {
+        merged[item.entity.id] = item.entity;
+      }
+    }
+    return merged;
+  }
+
+  /// Fetches [page]. When [append] is true (infinite scroll "load more"),
+  /// results are appended to the existing list instead of replacing it.
+  Future<void> fetchPage(int page, {bool append = false}) async {
+    if (append) {
+      state = state.copyWith(isLoadingMore: true, clearLoadMoreError: true);
+    } else {
+      state = state.copyWith(
+        isLoading: true,
+        isLoadingMore: false,
+        clearError: true,
+        clearLoadMoreError: true,
+      );
+    }
 
     try {
       final token = ref.read(authProvider).accessToken ?? '';
@@ -137,6 +175,7 @@ class ExpenseRequestListNotifier
               'search': state.filter.search,
               'status': state.filter.status,
               'formType': state.filter.formType,
+              'entityId': state.filter.entityId,
             },
           );
 
@@ -149,10 +188,10 @@ class ExpenseRequestListNotifier
             .read(authProvider.notifier)
             .refreshFromInterceptor();
         if (newToken == null) {
-          state = state.copyWith(
-            isLoading: false,
-            error: 'Sesi berakhir, silakan login kembali',
-          );
+          final message = 'Sesi berakhir, silakan login kembali';
+          state = append
+              ? state.copyWith(isLoadingMore: false, loadMoreError: message)
+              : state.copyWith(isLoading: false, error: message);
           return;
         }
         response = await http.get(uri, headers: _headers(newToken));
@@ -161,7 +200,7 @@ class ExpenseRequestListNotifier
       if (response.statusCode == 200) {
         final body = jsonDecode(response.body);
         final List<dynamic> rawList = (body['data'] ?? []) as List<dynamic>;
-        final items = rawList
+        final newItems = rawList
             .map((e) => ExpenseRequestItem.fromJson(e as Map<String, dynamic>))
             .toList();
         final meta = ExpenseRequestPageMeta.fromJson(
@@ -169,45 +208,37 @@ class ExpenseRequestListNotifier
         );
 
         state = state.copyWith(
-          items: items,
+          items: append ? [...state.items, ...newItems] : newItems,
           meta: meta,
           isLoading: false,
+          isLoadingMore: false,
           clearError: true,
+          clearLoadMoreError: true,
+          knownEntities: _mergeKnownEntities(newItems),
         );
       } else {
         print('[EXPENSE] Body: ${response.body}');
-        state = state.copyWith(
-          isLoading: false,
-          error:
-              'Gagal memuat daftar expense request (${response.statusCode})\n${response.body}',
-        );
+        final message =
+            'Gagal memuat daftar expense request (${response.statusCode})\n${response.body}';
+        state = append
+            ? state.copyWith(isLoadingMore: false, loadMoreError: message)
+            : state.copyWith(isLoading: false, error: message);
       }
     } catch (e, st) {
       print('[EXPENSE] Exception: $e');
       print('[EXPENSE] Stack: $st');
-      state = state.copyWith(isLoading: false, error: e);
+      state = append
+          ? state.copyWith(isLoadingMore: false, loadMoreError: e)
+          : state.copyWith(isLoading: false, error: e);
     }
   }
 
-  Future<void> refresh() => fetchPage(state.meta.currentPage);
+  Future<void> refresh() => fetchPage(1);
 
-  Future<void> nextPage() async {
-    if (!state.hasNextPage) return;
-    await fetchPage(state.meta.currentPage + 1);
-  }
-
-  Future<void> prevPage() async {
-    if (!state.hasPrevPage) return;
-    await fetchPage(state.meta.currentPage - 1);
-  }
-
-  Future<void> goToPage(int page) async {
-    if (page < 1 ||
-        page > state.meta.totalPages ||
-        page == state.meta.currentPage) {
-      return;
-    }
-    await fetchPage(page);
+  /// Loads the next page and appends it to the current list (infinite scroll).
+  Future<void> loadMore() async {
+    if (state.isLoading || state.isLoadingMore || !state.hasNextPage) return;
+    await fetchPage(state.meta.currentPage + 1, append: true);
   }
 
   Future<void> applyFilter(ExpenseRequestFilter filter) async {
@@ -261,6 +292,7 @@ class ExpenseRequestDetailNotifier
       if (response.statusCode == 200) {
         final body = jsonDecode(response.body);
         final data = body['data'];
+        print('[EXPENSE DETAIL] raw project field: ${data?['project']}');
         state = AsyncValue.data(
           ExpenseRequestDetail.fromJson(Map<String, dynamic>.from(data ?? {})),
         );
@@ -276,6 +308,174 @@ class ExpenseRequestDetailNotifier
       state = AsyncValue.error(e, st);
     }
   }
+
+  /// Fetches a single History row's snapshot detail — i.e. what the web
+  /// dashboard's "DETAIL INFORMATION" popup shows (notes + item lines) for
+  /// that specific revision — from
+  /// `GET finance/expenses-employee/{id}/history/{snapshotId}`.
+  ///
+  /// Throws on failure; the caller (the History tab) is expected to catch
+  /// it and show a snackbar rather than replacing the whole-screen state,
+  /// since a failed popup fetch shouldn't blow away the detail already on
+  /// screen.
+  Future<ExpenseHistorySnapshotDetail> fetchHistorySnapshot(
+    String snapshotId,
+  ) async {
+    final token = ref.read(authProvider).accessToken ?? '';
+    final uri = Uri.parse(
+      '${ApiConfig.baseUrl}${Endpoints.expensesEmployeeHistory(id, snapshotId)}',
+    );
+
+    print('[EXPENSE HISTORY] GET $uri');
+    var response = await http.get(uri, headers: _headers(token));
+    print('[EXPENSE HISTORY] Status: ${response.statusCode}');
+
+    if (response.statusCode == 401) {
+      final newToken = await ref
+          .read(authProvider.notifier)
+          .refreshFromInterceptor();
+      if (newToken == null) {
+        throw Exception('Sesi berakhir, silakan login kembali');
+      }
+      response = await http.get(uri, headers: _headers(newToken));
+    }
+
+    if (response.statusCode == 200) {
+      final body = jsonDecode(response.body);
+      final data = body['data'];
+      return ExpenseHistorySnapshotDetail.fromJson(
+        Map<String, dynamic>.from(data ?? {}),
+      );
+    }
+
+    print('[EXPENSE HISTORY] Body: ${response.body}');
+    throw Exception('Gagal memuat detail history (${response.statusCode})');
+  }
+
+  /// Approve or reject this expense request while it's still PENDING.
+  /// Refetches the detail afterwards (on success) so the screen reflects
+  /// the new status/phase immediately.
+  ///
+  /// IMPORTANT: the backend can respond with HTTP 200 even when the action
+  /// actually failed for a business reason (e.g. "you are not assigned as
+  /// level 1 approver") — the real result lives inside the JSON body, not
+  /// the status code. So we must inspect the body instead of trusting
+  /// `statusCode == 200` alone, otherwise the app shows a fake "success"
+  /// while nothing actually changed.
+  Future<ExpenseActionResult> sendAction({
+    required bool approve,
+    String? note,
+  }) async {
+    try {
+      final token = ref.read(authProvider).accessToken ?? '';
+      final uri = Uri.parse(
+        '${ApiConfig.baseUrl}${Endpoints.expensesEmployeeAction(id)}',
+      );
+
+      Future<http.Response> post(String accessToken) => http.post(
+        uri,
+        headers: _headers(accessToken),
+        body: jsonEncode({
+          'action': approve ? 'approve' : 'reject',
+          'note': note ?? '',
+        }),
+      );
+
+      print('[EXPENSE ACTION] POST $uri (${approve ? 'approve' : 'reject'})');
+      var response = await post(token);
+      print('[EXPENSE ACTION] Status: ${response.statusCode}');
+      print('[EXPENSE ACTION] Body: ${response.body}');
+
+      if (response.statusCode == 401) {
+        final newToken = await ref
+            .read(authProvider.notifier)
+            .refreshFromInterceptor();
+        if (newToken == null) {
+          return const ExpenseActionResult(
+            success: false,
+            message: 'Sesi berakhir, silakan login kembali',
+          );
+        }
+        response = await post(newToken);
+        print('[EXPENSE ACTION] Retry status: ${response.statusCode}');
+        print('[EXPENSE ACTION] Retry body: ${response.body}');
+      }
+
+      Map<String, dynamic> body = const {};
+      try {
+        final decoded = jsonDecode(response.body);
+        if (decoded is Map) body = Map<String, dynamic>.from(decoded);
+      } catch (_) {
+        // Body bukan JSON valid, biarkan body kosong.
+      }
+
+      // Cari indikator sukses/gagal dari body. Backend ini ternyata selalu
+      // bisa saja membalas HTTP 200 di level transport, sementara kode
+      // status sesungguhnya ada di body sebagai angka (contoh nyata:
+      // {"status": 400, "msg": "Validation failed", "errors": {...}}).
+      // Jadi field 'status' numerik di body HARUS diperiksa juga, bukan
+      // cuma HTTP status code-nya.
+      final successField = body['success'];
+      final numericBodyStatus = body['status'] is num
+          ? (body['status'] as num).toInt()
+          : int.tryParse('${body['status']}');
+      final stringStatusField = body['status']?.toString().toLowerCase();
+      final hasErrorField =
+          (body['error'] != null && body['error'].toString().isNotEmpty) ||
+          (body['errors'] != null &&
+              !(body['errors'] is Map && (body['errors'] as Map).isEmpty));
+
+      final bodySaysFailed =
+          successField == false ||
+          stringStatusField == 'error' ||
+          stringStatusField == 'failed' ||
+          (numericBodyStatus != null && numericBodyStatus >= 400) ||
+          hasErrorField;
+
+      final isHttpOk = response.statusCode >= 200 && response.statusCode < 300;
+      final isSuccess = isHttpOk && !bodySaysFailed;
+
+      // Susun pesan: kalau ada detail per-field di 'errors', gabungkan
+      // supaya jelas field mana yang salah (mis. "action: must be one of
+      // approve or reject"), fallback ke message/msg/error top-level.
+      String? message;
+      final errorsField = body['errors'];
+      if (errorsField is Map && errorsField.isNotEmpty) {
+        message = errorsField.entries
+            .map((e) => '${e.key}: ${e.value}')
+            .join('\n');
+      } else if (errorsField is String && errorsField.trim().isNotEmpty) {
+        message = errorsField;
+      }
+      message ??= (body['message'] ?? body['msg'] ?? body['error'])?.toString();
+
+      if (isSuccess) {
+        await fetch();
+        return ExpenseActionResult(success: true, message: message);
+      }
+
+      return ExpenseActionResult(
+        success: false,
+        message: (message != null && message.trim().isNotEmpty)
+            ? message
+            : 'Failed to process request, please try again',
+      );
+    } catch (e, st) {
+      print('[EXPENSE ACTION] Exception: $e');
+      print('[EXPENSE ACTION] Stack: $st');
+      return const ExpenseActionResult(
+        success: false,
+        message: 'Failed to process request, please try again',
+      );
+    }
+  }
+}
+
+class ExpenseActionResult {
+  final bool success;
+  final String? message;
+
+  const ExpenseActionResult({required this.success, this.message});
 }
 
 final expenseRequestDetailProvider =

@@ -1,8 +1,15 @@
+import 'package:flutter/services.dart' show appFlavor;
+
 class ApiConfig {
-  static const String baseUrl = "https://corim-api.eon.id/";
+  static bool get isProd => appFlavor == 'prod';
+  static bool get isDev => !isProd;
+
+  static String get baseUrl =>
+      isProd ? "https://api.corimgroup.com/" : "https://corim-api.eon.id/";
+
   static const String contentTypeJson = "application/json";
 
-  static const String storageBaseUrl = '${baseUrl}storage/';
+  static String get storageBaseUrl => '${baseUrl}storage/';
 }
 
 class Endpoints {
@@ -12,6 +19,7 @@ class Endpoints {
   static const String profile = "profile";
   static const String clients = "clients";
   static String clientDetail(String id) => "clients/$id";
+  static const String entities = "entities";
   static const String projects = "projects";
   static String projectDetail(String id) => "projects/$id";
   static String projectSalesStatusQuotations(String id) =>
@@ -26,6 +34,10 @@ class Endpoints {
   static const String expensesEmployee = "finance/expenses-employee";
   static String expensesEmployeeDetail(String id) =>
       "finance/expenses-employee/$id";
+  static String expensesEmployeeAction(String id) =>
+      "finance/expenses-employee/$id/action";
+  static String expensesEmployeeHistory(String id, String snapshotId) =>
+      "finance/expenses-employee/$id/history/$snapshotId";
 }
 
 class StorageKeys {

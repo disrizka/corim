@@ -1,4 +1,4 @@
-import 'package:corim/admin/project/project_detail_screen.dart';
+import 'package:corim/finance/expense_request_detail_screen.dart';
 import 'package:corim/notifications/notification_detail_screen.dart';
 import 'package:corim/notifications/notification_model.dart';
 import 'package:corim/notifications/notification_pageview.dart';
@@ -46,25 +46,23 @@ class NotificationScreen extends ConsumerStatefulWidget {
 
 class _NotificationScreenState extends ConsumerState<NotificationScreen> {
   _NotifFilter _filter = _NotifFilter.all;
-  int _currentPage = 1;
 
   @override
   Widget build(BuildContext context) {
     final state = ref.watch(notificationListProvider);
-    final currentPageItems = state.pageItems(_currentPage);
+    final allItems = state.loadedItems;
 
     return Scaffold(
       backgroundColor: NotifColors.background,
       body: Column(
         children: [
           _buildHeader(context),
-          if (currentPageItems.isNotEmpty) _buildFilterBar(currentPageItems),
+          if (allItems.isNotEmpty) _buildFilterBar(allItems),
           Expanded(
-            child: NotificationPageView(
+            child: NotificationInfiniteListView(
               cardBuilder: (context, item) => _NotificationCard(item: item),
               filter: _filter.matches,
               sortRank: (n) => n.isPending ? 0 : 1,
-              onPageChanged: (page) => setState(() => _currentPage = page),
               emptyBuilder: (context) => _buildEmptyState(),
               emptyFilterBuilder: (context, hasSearch) =>
                   _buildEmptyFilterState(),
@@ -134,20 +132,8 @@ class _NotificationScreenState extends ConsumerState<NotificationScreen> {
   Widget _buildFilterBar(List<NotificationItem> items) {
     return Container(
       color: Colors.white,
-      padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Padding(
-            padding: const EdgeInsets.only(bottom: 8),
-            child: Text(
-              'Filters apply to page $_currentPage',
-              style: TextStyle(fontSize: 11, color: Colors.grey.shade400),
-            ),
-          ),
-          _buildFilterChipsRow(items),
-        ],
-      ),
+      padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
+      child: _buildFilterChipsRow(items),
     );
   }
 
@@ -368,21 +354,11 @@ class _NotificationCardState extends ConsumerState<_NotificationCard> {
     );
   }
 
-  void _openProject() {
-    final projectId = widget.item.projectId.trim();
-    if (projectId.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          behavior: SnackBarBehavior.floating,
-          content: Text('No project linked to this notification'),
-        ),
-      );
-      return;
-    }
+  void _openExpenseDetail() {
     Navigator.push(
       context,
       MaterialPageRoute(
-        builder: (_) => ProjectDetailScreen(projectId: projectId),
+        builder: (_) => ExpenseRequestDetailScreen(expenseId: widget.item.id),
       ),
     );
   }
@@ -390,7 +366,6 @@ class _NotificationCardState extends ConsumerState<_NotificationCard> {
   @override
   Widget build(BuildContext context) {
     final n = widget.item;
-    final status = NotifStatus.fromApproval(n.approvalStatus);
 
     return Container(
       decoration: BoxDecoration(
@@ -420,9 +395,15 @@ class _NotificationCardState extends ConsumerState<_NotificationCard> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     NotifIconChip(
-                      icon: status.icon,
-                      background: status.bg,
-                      foreground: status.accent,
+                      icon: n.isExpenseRequest
+                          ? Icons.receipt_long_rounded
+                          : Icons.trending_up_rounded,
+                      background: n.isExpenseRequest
+                          ? const Color(0xFFEEF2FF)
+                          : const Color(0xFFDCFCE7),
+                      foreground: n.isExpenseRequest
+                          ? const Color(0xFF0824A0)
+                          : const Color(0xFF16A34A),
                     ),
                     const SizedBox(width: 12),
                     Expanded(
@@ -496,28 +477,35 @@ class _NotificationCardState extends ConsumerState<_NotificationCard> {
                       ),
                   ],
                 ),
-                const SizedBox(height: 10),
-                Align(
-                  alignment: Alignment.centerLeft,
-                  child: TextButton.icon(
-                    onPressed: _openProject,
-                    icon: const Icon(Icons.open_in_new_rounded, size: 15),
-                    label: const Text(
-                      'View Project',
-                      style: TextStyle(
-                        fontSize: 12.5,
-                        fontWeight: FontWeight.w600,
+
+                // "View Project" link removed — expense requests still link
+                // out to their detail screen, other notification types no
+                // longer show an outbound action link here.
+                if (n.isExpenseRequest) ...[
+                  const SizedBox(height: 10),
+                  Align(
+                    alignment: Alignment.centerLeft,
+                    child: TextButton.icon(
+                      onPressed: _openExpenseDetail,
+                      icon: const Icon(Icons.open_in_new_rounded, size: 15),
+                      label: const Text(
+                        'Expense Request Detail',
+                        style: TextStyle(
+                          fontSize: 12.5,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                      style: TextButton.styleFrom(
+                        foregroundColor: const Color(0xFF075985),
+                        padding: EdgeInsets.zero,
+                        minimumSize: const Size(0, 0),
+                        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                       ),
                     ),
-                    style: TextButton.styleFrom(
-                      foregroundColor: const Color(0xFF075985),
-                      padding: EdgeInsets.zero,
-                      minimumSize: const Size(0, 0),
-                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                    ),
                   ),
-                ),
-                if (n.isPending) ...[
+                ],
+
+                if (n.isPending && n.canApprove) ...[
                   const SizedBox(height: 14),
                   const Divider(height: 1, color: NotifColors.divider),
                   const SizedBox(height: 14),

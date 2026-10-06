@@ -15,26 +15,72 @@ class ProjectListScreen extends ConsumerStatefulWidget {
 
 class _ProjectListScreenState extends ConsumerState<ProjectListScreen> {
   String _query = '';
+  final ScrollController _scrollController = ScrollController();
+
+  @override
+  void initState() {
+    super.initState();
+    _scrollController.addListener(_onScroll);
+  }
+
+  @override
+  void dispose() {
+    _scrollController.removeListener(_onScroll);
+    _scrollController.dispose();
+    super.dispose();
+  }
+
+  void _onScroll() {
+    if (!_scrollController.hasClients) return;
+    final position = _scrollController.position;
+    // Mulai load halaman berikutnya sebelum benar-benar mentok bawah,
+    // supaya user gak sempat lihat jeda kosong.
+    if (position.pixels >= position.maxScrollExtent - 300) {
+      ref.read(projectListPagingProvider.notifier).loadMore();
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
     final summary = ref.watch(projectStatusSummaryProvider);
-    final projectsAsync = ref.watch(projectListProvider);
+    final pagingState = ref.watch(projectListPagingProvider);
 
     return Scaffold(
       backgroundColor: const Color(0xFFF5F6FA),
       body: Stack(
         children: [
-          Column(
-            children: [
-              _buildHeader(context, summary),
-              Expanded(
-                child: SingleChildScrollView(
-                  padding: const EdgeInsets.only(bottom: 100),
-                  child: _buildBodyList(projectsAsync),
+          RefreshIndicator(
+            onRefresh: () =>
+                ref.read(projectListPagingProvider.notifier).refresh(),
+            child: CustomScrollView(
+              controller: _scrollController,
+              slivers: [
+                SliverToBoxAdapter(child: _buildHeader(context, summary)),
+                SliverToBoxAdapter(
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text(
+                          'Project List Data',
+                          style: TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.w700,
+                            color: Color(0xFF1A1A2E),
+                          ),
+                        ),
+                        const SizedBox(height: 12),
+                        _buildSearchBar(),
+                        const SizedBox(height: 16),
+                      ],
+                    ),
+                  ),
                 ),
-              ),
-            ],
+                _buildSliverBody(pagingState),
+                const SliverToBoxAdapter(child: SizedBox(height: 100)),
+              ],
+            ),
           ),
           const Positioned(
             bottom: 16,
@@ -71,6 +117,15 @@ class _ProjectListScreenState extends ConsumerState<ProjectListScreen> {
                       Icons.arrow_back_ios_new_rounded,
                       color: Colors.white,
                       size: 20,
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  const Text(
+                    'Projects',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 18,
+                      fontWeight: FontWeight.w700,
                     ),
                   ),
                   const Spacer(),
@@ -166,89 +221,6 @@ class _ProjectListScreenState extends ConsumerState<ProjectListScreen> {
     );
   }
 
-  Widget _buildBodyList(AsyncValue<List<ProjectListItem>> projectsAsync) {
-    return Padding(
-      padding: const EdgeInsets.all(16),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Text(
-            'Project List Data',
-            style: TextStyle(
-              fontSize: 18,
-              fontWeight: FontWeight.w700,
-              color: Color(0xFF1A1A2E),
-            ),
-          ),
-          const SizedBox(height: 12),
-          _buildSearchBar(),
-          const SizedBox(height: 16),
-          projectsAsync.when(
-            data: (projects) {
-              final filtered = _query.isEmpty
-                  ? projects
-                  : projects.where((p) {
-                      final q = _query.toLowerCase();
-                      return p.clientName.toLowerCase().contains(q) ||
-                          p.projectName.toLowerCase().contains(q) ||
-                          p.projectStatus.toLowerCase().contains(q) ||
-                          p.salesStatus.toLowerCase().contains(q);
-                    }).toList();
-
-              if (filtered.isEmpty) {
-                return const Padding(
-                  padding: EdgeInsets.symmetric(vertical: 40),
-                  child: Center(
-                    child: Text(
-                      'Tidak ada data ditemukan',
-                      style: TextStyle(color: Colors.grey, fontSize: 13),
-                    ),
-                  ),
-                );
-              }
-
-              return Column(
-                children: filtered
-                    .map(
-                      (project) => Padding(
-                        padding: const EdgeInsets.only(bottom: 12),
-                        child: GestureDetector(
-                          onTap: () {
-                            Navigator.push(
-                              context,
-                              MaterialPageRoute(
-                                builder: (_) =>
-                                    ProjectDetailScreen(projectId: project.id),
-                              ),
-                            );
-                          },
-                          child: _buildProjectCard(project),
-                        ),
-                      ),
-                    )
-                    .toList(),
-              );
-            },
-            loading: () => const Padding(
-              padding: EdgeInsets.symmetric(vertical: 40),
-              child: Center(child: CircularProgressIndicator()),
-            ),
-            error: (err, st) => Padding(
-              padding: const EdgeInsets.symmetric(vertical: 40),
-              child: Center(
-                child: Text(
-                  'Gagal memuat data: $err',
-                  textAlign: TextAlign.center,
-                  style: const TextStyle(color: Colors.redAccent, fontSize: 13),
-                ),
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
   Widget _buildSearchBar() {
     return Container(
       height: 44,
@@ -277,6 +249,98 @@ class _ProjectListScreenState extends ConsumerState<ProjectListScreen> {
             child: Icon(Icons.search, color: Colors.grey, size: 20),
           ),
         ],
+      ),
+    );
+  }
+
+  Widget _buildSliverBody(ProjectListPagingState state) {
+    if (state.isInitialLoading) {
+      return const SliverToBoxAdapter(
+        child: Padding(
+          padding: EdgeInsets.symmetric(vertical: 40),
+          child: Center(child: CircularProgressIndicator()),
+        ),
+      );
+    }
+
+    if (state.error != null && state.items.isEmpty) {
+      return SliverToBoxAdapter(
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 40),
+          child: Center(
+            child: Text(
+              'Gagal memuat data: ${state.error}',
+              textAlign: TextAlign.center,
+              style: const TextStyle(color: Colors.redAccent, fontSize: 13),
+            ),
+          ),
+        ),
+      );
+    }
+
+    final filtered = _query.isEmpty
+        ? state.items
+        : state.items.where((p) {
+            final q = _query.toLowerCase();
+            return p.clientName.toLowerCase().contains(q) ||
+                p.projectName.toLowerCase().contains(q) ||
+                p.projectStatus.toLowerCase().contains(q) ||
+                p.salesStatus.toLowerCase().contains(q);
+          }).toList();
+
+    if (filtered.isEmpty) {
+      return const SliverToBoxAdapter(
+        child: Padding(
+          padding: EdgeInsets.symmetric(vertical: 40),
+          child: Center(
+            child: Text(
+              'Tidak ada data ditemukan',
+              style: TextStyle(color: Colors.grey, fontSize: 13),
+            ),
+          ),
+        ),
+      );
+    }
+
+    // Loader "load more" cuma relevan kalau lagi gak nge-search (search
+    // hanya nyaring dari data yang udah ke-load).
+    final showTrailingLoader =
+        _query.isEmpty && (state.isLoadingMore || state.hasMore);
+    final itemCount = filtered.length + (showTrailingLoader ? 1 : 0);
+
+    return SliverPadding(
+      padding: const EdgeInsets.symmetric(horizontal: 16),
+      sliver: SliverList(
+        delegate: SliverChildBuilderDelegate((context, index) {
+          if (index >= filtered.length) {
+            return const Padding(
+              padding: EdgeInsets.symmetric(vertical: 16),
+              child: Center(
+                child: SizedBox(
+                  width: 20,
+                  height: 20,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                ),
+              ),
+            );
+          }
+
+          final project = filtered[index];
+          return Padding(
+            padding: const EdgeInsets.only(bottom: 12),
+            child: GestureDetector(
+              onTap: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => ProjectDetailScreen(projectId: project.id),
+                  ),
+                );
+              },
+              child: _buildProjectCard(project),
+            ),
+          );
+        }, childCount: itemCount),
       ),
     );
   }
