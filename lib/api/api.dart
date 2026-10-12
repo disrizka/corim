@@ -5,7 +5,7 @@ class ApiConfig {
   static bool get isDev => !isProd;
 
   static String get baseUrl =>
-      isProd ? "https://api.corimgroup.com/" : "https://corim-api.eon.id/";
+      isProd ? "https://api.corimgroup.com/" : "https://api.corimgroup.com/";
 
   static const String contentTypeJson = "application/json";
 
