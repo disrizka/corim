@@ -1,58 +1,13 @@
+import 'package:corim/admin/home/activity_list_view.dart';
 import 'package:corim/admin/home/greeting_provider.dart';
 import 'package:corim/auth/auth_provider.dart';
 import 'package:corim/crm/menu_screen.dart';
-import 'package:corim/finance/entity_model.dart';
-import 'package:corim/finance/entity_provider.dart';
 import 'package:corim/finance/finance_menu_screen.dart';
 import 'package:corim/main_button_nav.dart';
 import 'package:corim/notifications/notifcation_screen.dart';
-import 'package:corim/notifications/notification_detail_screen.dart';
-import 'package:corim/notifications/notification_model.dart';
-import 'package:corim/notifications/notification_pageview.dart';
 import 'package:corim/notifications/notification_provider.dart';
-import 'package:corim/notifications/notification_style.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-
-enum _HomeFilter { all, today, yesterday, lastWeek }
-
-extension on _HomeFilter {
-  String get label {
-    switch (this) {
-      case _HomeFilter.all:
-        return 'All';
-      case _HomeFilter.today:
-        return 'Today';
-      case _HomeFilter.yesterday:
-        return 'Yesterday';
-      case _HomeFilter.lastWeek:
-        return 'Last Week';
-    }
-  }
-
-  bool matches(NotificationItem n) {
-    if (this == _HomeFilter.all) return true;
-
-    final createdAt = DateTime.tryParse(n.createdAt);
-    if (createdAt == null) return this == _HomeFilter.all;
-
-    final now = DateTime.now();
-    final today = DateTime(now.year, now.month, now.day);
-    final itemDay = DateTime(createdAt.year, createdAt.month, createdAt.day);
-    final diff = today.difference(itemDay).inDays;
-
-    switch (this) {
-      case _HomeFilter.today:
-        return diff == 0;
-      case _HomeFilter.yesterday:
-        return diff == 1;
-      case _HomeFilter.lastWeek:
-        return diff > 1 && diff <= 7;
-      case _HomeFilter.all:
-        return true;
-    }
-  }
-}
 
 class HomeScreen extends ConsumerStatefulWidget {
   const HomeScreen({super.key});
@@ -62,49 +17,7 @@ class HomeScreen extends ConsumerStatefulWidget {
 }
 
 class _HomeScreenState extends ConsumerState<HomeScreen> {
-  _HomeFilter _filter = _HomeFilter.all;
-  EntityItem? _entityFilter;
-  final _searchController = TextEditingController();
-  static const double _bottomNavReservedHeight = 16 + 56 + 16;
-
-  @override
-  void initState() {
-    super.initState();
-    _searchController.addListener(_onSearchChanged);
-  }
-
-  void _onSearchChanged() => setState(() {});
-
-  @override
-  void dispose() {
-    _searchController.removeListener(_onSearchChanged);
-    _searchController.dispose();
-    super.dispose();
-  }
-
-  bool _matchesSearch(NotificationItem n, String query) {
-    if (query.isEmpty) return true;
-    final q = query.toLowerCase();
-    return n.title.toLowerCase().contains(q) ||
-        n.desc.toLowerCase().contains(q) ||
-        n.projectName.toLowerCase().contains(q) ||
-        n.clientName.toLowerCase().contains(q) ||
-        n.requestedBy.toLowerCase().contains(q);
-  }
-
-  /// Notifications only carry the entity as a raw string (name or code
-  /// depending on the backend payload), so match against either field of
-  /// the selected entity from `GET /entities`.
-  bool _matchesEntity(NotificationItem n) {
-    final selected = _entityFilter;
-    if (selected == null) return true;
-    final value = n.entity.trim().toLowerCase();
-    return value == selected.name.trim().toLowerCase() ||
-        value == selected.code.trim().toLowerCase();
-  }
-
-  bool _matchesFilters(NotificationItem n) =>
-      _filter.matches(n) && _matchesEntity(n);
+  static const double _bottomNavReservedHeight = 16 + 60 + 16;
 
   void _showComingSoon(String feature) {
     showDialog(
@@ -133,23 +46,50 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
             children: [
               _buildHeader(context, ref),
               _buildMenuRow(context),
-              _buildRequestListHeader(),
-              Expanded(child: _buildRequestListBody()),
+              _buildActivityHeader(),
+              Expanded(
+                child: ActivityInfiniteListView(
+                  listPadding: const EdgeInsets.fromLTRB(
+                    16,
+                    8,
+                    16,
+                    _bottomNavReservedHeight + 8,
+                  ),
+                ),
+              ),
             ],
           ),
-
-          Positioned(
+          const Positioned(
             bottom: 16,
             left: 16,
             right: 16,
-            child: const MainBottomNav(currentItem: MainNavItem.home),
+            child: MainBottomNav(currentItem: MainNavItem.home),
           ),
         ],
       ),
     );
   }
 
+  Widget _buildActivityHeader() {
+    return const Padding(
+      padding: EdgeInsets.fromLTRB(16, 8, 16, 8),
+      child: Align(
+        alignment: Alignment.centerLeft,
+        child: Text(
+          'Update Activity',
+          style: TextStyle(
+            fontSize: 18,
+            fontWeight: FontWeight.w700,
+            color: Color(0xFF1A1A2E),
+          ),
+        ),
+      ),
+    );
+  }
+
   Widget _buildHeader(BuildContext context, WidgetRef ref) {
+    final pending = ref.watch(pendingNotificationCountProvider);
+
     return Container(
       decoration: const BoxDecoration(
         gradient: LinearGradient(
@@ -178,7 +118,6 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                 ),
               ),
               const SizedBox(width: 12),
-
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -201,7 +140,6 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                   ],
                 ),
               ),
-
               GestureDetector(
                 onTap: () {
                   Navigator.push(
@@ -219,7 +157,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                       color: Colors.white,
                       size: 26,
                     ),
-                    if (ref.watch(pendingNotificationCountProvider) > 0)
+                    if (pending > 0)
                       Positioned(
                         right: -2,
                         top: -2,
@@ -234,7 +172,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                             minHeight: 16,
                           ),
                           child: Text(
-                            '${ref.watch(pendingNotificationCountProvider)}',
+                            '$pending',
                             textAlign: TextAlign.center,
                             style: const TextStyle(
                               color: Colors.white,
@@ -258,22 +196,18 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
       {
         'asset': 'assets/images/home/crm.png',
         'label': 'CRM',
-        'onTap': () {
-          Navigator.push(
-            context,
-            MaterialPageRoute(builder: (_) => const CrmMenuScreen()),
-          );
-        },
+        'onTap': () => Navigator.push(
+          context,
+          MaterialPageRoute(builder: (_) => const CrmMenuScreen()),
+        ),
       },
       {
         'asset': 'assets/images/home/finance.png',
         'label': 'FINANCE',
-        'onTap': () {
-          Navigator.push(
-            context,
-            MaterialPageRoute(builder: (_) => const FinanceMenuScreen()),
-          );
-        },
+        'onTap': () => Navigator.push(
+          context,
+          MaterialPageRoute(builder: (_) => const FinanceMenuScreen()),
+        ),
       },
       {
         'asset': 'assets/images/home/hr.png',
@@ -315,541 +249,6 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
             ),
           );
         }).toList(),
-      ),
-    );
-  }
-
-  Widget _buildRequestListHeader() {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(10, 16, 10, 12),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Text(
-            'Request list',
-            style: TextStyle(
-              fontSize: 18,
-              fontWeight: FontWeight.w700,
-              color: Color(0xFF1A1A2E),
-            ),
-          ),
-          const SizedBox(height: 12),
-          _buildFilterChips(),
-          const SizedBox(height: 8),
-          _buildEntityFilterChips(),
-          const SizedBox(height: 12),
-          _buildSearchBar(),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildRequestListBody() {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 10),
-      child: NotificationInfiniteListView(
-        // jarak bawah di dalam list, bukan di luar list,
-        // supaya list tetap tampil sampai ke bawah layar (di belakang nav)
-        listPadding: const EdgeInsets.fromLTRB(
-          16,
-          16,
-          16,
-          _bottomNavReservedHeight + 24,
-        ),
-        cardBuilder: (context, item) => Padding(
-          padding: const EdgeInsets.only(bottom: 12),
-          child: _buildRequestCard(item),
-        ),
-        filter: _matchesFilters,
-        searchQuery: _searchController.text,
-        searchMatcher: _matchesSearch,
-        sortRank: (n) => n.isPending ? 0 : 1,
-        emptyBuilder: (context) => _buildEmptyState(),
-        emptyFilterBuilder: (context, hasSearch) => _buildEmptyFilterState(),
-        errorBuilder: (context, err) => _buildErrorState(err),
-      ),
-    );
-  }
-
-  Widget _buildFilterChips() {
-    return SingleChildScrollView(
-      scrollDirection: Axis.horizontal,
-      child: Row(
-        children: _HomeFilter.values.map((f) {
-          final isActive = f == _filter;
-          return Padding(
-            padding: const EdgeInsets.only(right: 8),
-            child: GestureDetector(
-              onTap: () => setState(() => _filter = f),
-              child: isActive
-                  ? DecoratedBox(
-                      decoration: BoxDecoration(
-                        gradient: const LinearGradient(
-                          colors: [Color(0xFF1B1C52), Color(0xFF075985)],
-                        ),
-                        borderRadius: BorderRadius.circular(20),
-                      ),
-                      child: Padding(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 16,
-                          vertical: 8,
-                        ),
-                        child: Text(
-                          f.label,
-                          style: const TextStyle(
-                            fontSize: 13,
-                            fontWeight: FontWeight.w500,
-                            color: Colors.white,
-                          ),
-                        ),
-                      ),
-                    )
-                  : Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 16,
-                        vertical: 8,
-                      ),
-                      decoration: BoxDecoration(
-                        color: Colors.transparent,
-                        border: Border.all(color: const Color(0xFFCCCCCC)),
-                        borderRadius: BorderRadius.circular(20),
-                      ),
-                      child: Text(
-                        f.label,
-                        style: const TextStyle(
-                          fontSize: 13,
-                          fontWeight: FontWeight.w500,
-                          color: Color(0xFF555555),
-                        ),
-                      ),
-                    ),
-            ),
-          );
-        }).toList(),
-      ),
-    );
-  }
-
-  /// Entity filter chips, sourced from the same `GET /entities` list used
-  /// by the expense request filter, so both screens stay in sync.
-  Widget _buildEntityFilterChips() {
-    final entities = ref.watch(entityOptionsProvider);
-    if (entities.isEmpty) return const SizedBox.shrink();
-
-    return SingleChildScrollView(
-      scrollDirection: Axis.horizontal,
-      child: Row(
-        // children: [
-        //   _entityChip(
-        //     label: 'All Entities',
-        //     isActive: _entityFilter == null,
-        //     onTap: () => setState(() => _entityFilter = null),
-        //   ),
-        //   for (final e in entities)
-        //     Padding(
-        //       padding: const EdgeInsets.only(left: 8),
-        //       child: _entityChip(
-        //         label: e.displayLabel,
-        //         isActive: _entityFilter?.id == e.id,
-        //         onTap: () => setState(() => _entityFilter = e),
-        //       ),
-        //     ),
-        // ],
-      ),
-    );
-  }
-
-  // Widget _entityChip({
-  //   required String label,
-  //   required bool isActive,
-  //   required VoidCallback onTap,
-  // }) {
-  //   return GestureDetector(
-  //     onTap: onTap,
-  //     child: Container(
-  //       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
-  //       decoration: BoxDecoration(
-  //         color: isActive ? const Color(0xFFEEF2FF) : Colors.transparent,
-  //         border: Border.all(
-  //           color: isActive ? const Color(0xFF0824A0) : const Color(0xFFCCCCCC),
-  //         ),
-  //         borderRadius: BorderRadius.circular(20),
-  //       ),
-  //       child: Row(
-  //         mainAxisSize: MainAxisSize.min,
-  //         children: [
-  //           Icon(
-  //             Icons.apartment_outlined,
-  //             size: 12,
-  //             color: isActive ? const Color(0xFF0824A0) : Colors.grey.shade600,
-  //           ),
-  //           const SizedBox(width: 4),
-  //           Text(
-  //             label,
-  //             style: TextStyle(
-  //               fontSize: 12,
-  //               fontWeight: FontWeight.w500,
-  //               color: isActive
-  //                   ? const Color(0xFF0824A0)
-  //                   : const Color(0xFF555555),
-  //             ),
-  //           ),
-  //         ],
-  //       ),
-  //     ),
-  //   );
-  // }
-
-  Widget _buildSearchBar() {
-    return Container(
-      height: 44,
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(22),
-        border: Border.all(color: const Color(0xFFE0E0E0)),
-      ),
-      child: Row(
-        children: [
-          const SizedBox(width: 16),
-          Expanded(
-            child: TextField(
-              controller: _searchController,
-              style: const TextStyle(fontSize: 13),
-              decoration: const InputDecoration(
-                hintText: 'Search escalation, reimbursement, approval...',
-                hintStyle: TextStyle(color: Colors.grey, fontSize: 13),
-                border: InputBorder.none,
-                isDense: true,
-              ),
-            ),
-          ),
-          if (_searchController.text.isNotEmpty)
-            IconButton(
-              icon: const Icon(Icons.close, color: Colors.grey, size: 18),
-              onPressed: () => _searchController.clear(),
-              splashRadius: 16,
-            )
-          else
-            const Padding(
-              padding: EdgeInsets.only(right: 12),
-              child: Icon(Icons.search, color: Colors.grey, size: 20),
-            ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildEmptyState() {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 32),
-      child: Center(
-        child: Column(
-          children: [
-            Icon(Icons.inbox_outlined, size: 40, color: Colors.grey.shade400),
-            const SizedBox(height: 12),
-            Text(
-              'No requests yet',
-              style: TextStyle(fontSize: 13, color: Colors.grey.shade500),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildEmptyFilterState() {
-    final query = _searchController.text.trim();
-    final message = query.isEmpty
-        ? 'No requests for "${_filter.label}"'
-        : 'No requests match "$query"';
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 32),
-      child: Center(
-        child: Text(
-          message,
-          style: TextStyle(fontSize: 13, color: Colors.grey.shade500),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildErrorState(Object err) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 24),
-      child: Column(
-        children: [
-          const Icon(
-            Icons.wifi_off_rounded,
-            size: 32,
-            color: Color(0xFFB91C1C),
-          ),
-          const SizedBox(height: 8),
-          const Text(
-            'Failed to load request list',
-            style: TextStyle(fontSize: 13),
-          ),
-          const SizedBox(height: 12),
-          TextButton(
-            onPressed: () =>
-                ref.read(notificationListProvider.notifier).fetch(),
-            child: const Text('Retry'),
-          ),
-        ],
-      ),
-    );
-  }
-
-  void _openDetail(NotificationItem n) {
-    Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (_) => NotificationDetailScreen(notificationId: n.id),
-      ),
-    );
-  }
-
-  Widget _buildEntityBadge(String entity) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-      // decoration: BoxDecoration(
-      //   color: const Color(0xFFEEF2FF),
-      //   borderRadius: BorderRadius.circular(20),
-      // ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          // const Icon(
-          //   Icons.apartment_outlined,
-          //   size: 12,
-          //   color: Color(0xFF0824A0),
-          // ),
-          // const SizedBox(width: 4),
-          // ConstrainedBox(
-          //   constraints: const BoxConstraints(maxWidth: 90),
-          //   child: Text(
-          //     entity,
-          //     maxLines: 1,
-          //     overflow: TextOverflow.ellipsis,
-          //     style: const TextStyle(
-          //       fontSize: 11,
-          //       fontWeight: FontWeight.w600,
-          //       color: Color(0xFF0824A0),
-          //     ),
-          //   ),
-          // ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildRequestCard(NotificationItem n) {
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(12),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.05),
-            blurRadius: 8,
-            offset: const Offset(0, 2),
-          ),
-        ],
-      ),
-      child: Material(
-        color: Colors.transparent,
-        child: InkWell(
-          borderRadius: BorderRadius.circular(12),
-          onTap: () => _openDetail(n),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                children: [
-                  Container(
-                    width: 40,
-                    height: 40,
-                    decoration: BoxDecoration(
-                      color: n.isExpenseRequest
-                          ? const Color(0xFFEEF2FF)
-                          : const Color(0xFFDCFCE7),
-                      borderRadius: BorderRadius.circular(10),
-                    ),
-                    child: Icon(
-                      n.isExpenseRequest
-                          ? Icons.receipt_long_rounded
-                          : Icons.trending_up_rounded,
-                      color: n.isExpenseRequest
-                          ? const Color(0xFF0824A0)
-                          : const Color(0xFF16A34A),
-                      size: 22,
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          n.title,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(
-                            fontSize: 14,
-                            fontWeight: FontWeight.w600,
-                            color: Color(0xFF1A1A2E),
-                          ),
-                        ),
-                        const SizedBox(height: 2),
-                        Wrap(
-                          spacing: 10,
-                          runSpacing: 2,
-                          crossAxisAlignment: WrapCrossAlignment.center,
-                          children: [
-                            Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                const Icon(
-                                  Icons.calendar_today_outlined,
-                                  size: 12,
-                                  color: Colors.grey,
-                                ),
-                                const SizedBox(width: 4),
-                                Text(
-                                  n.activityDateId,
-                                  style: const TextStyle(
-                                    fontSize: 12,
-                                    color: Colors.grey,
-                                  ),
-                                ),
-                              ],
-                            ),
-                            Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                const Icon(
-                                  Icons.access_time_rounded,
-                                  size: 12,
-                                  color: Colors.grey,
-                                ),
-                                const SizedBox(width: 4),
-                                Text(
-                                  n.activityTimeShort,
-                                  style: const TextStyle(
-                                    fontSize: 12,
-                                    color: Colors.grey,
-                                  ),
-                                ),
-                              ],
-                            ),
-                            if (n.files.isNotEmpty)
-                              Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  const Icon(
-                                    Icons.attach_file_rounded,
-                                    size: 12,
-                                    color: Colors.grey,
-                                  ),
-                                  const SizedBox(width: 2),
-                                  Text(
-                                    n.files.length > 1
-                                        ? '${n.files.length} files'
-                                        : '1 file',
-                                    style: const TextStyle(
-                                      fontSize: 12,
-                                      color: Colors.grey,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                          ],
-                        ),
-                      ],
-                    ),
-                  ),
-                  NotifStatusBadge(status: n.approvalStatus, dense: true),
-                ],
-              ),
-              const SizedBox(height: 10),
-
-              Text(
-                n.desc,
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
-                style: const TextStyle(fontSize: 13, color: Color(0xFF444444)),
-              ),
-              const SizedBox(height: 12),
-
-              Row(
-                crossAxisAlignment: CrossAxisAlignment.center,
-                children: [
-                  Expanded(
-                    child: Row(
-                      children: [
-                        const Icon(
-                          Icons.person_outline_rounded,
-                          size: 14,
-                          color: Color(0xFF555555),
-                        ),
-                        const SizedBox(width: 4),
-                        Expanded(
-                          child: Text(
-                            n.requestedBy,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(
-                              fontSize: 12,
-                              fontWeight: FontWeight.w500,
-                              color: Color(0xFF222222),
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  _buildEntityBadge(n.entity),
-                ],
-              ),
-              const SizedBox(height: 14),
-
-              SizedBox(
-                width: double.infinity,
-                height: 42,
-                child: DecoratedBox(
-                  decoration: BoxDecoration(
-                    gradient: const LinearGradient(
-                      begin: Alignment.centerLeft,
-                      end: Alignment.centerRight,
-                      colors: [Color(0xFF1B1C52), Color(0xFF075985)],
-                    ),
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: ElevatedButton(
-                    onPressed: () => _openDetail(n),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.transparent,
-                      foregroundColor: Colors.white,
-                      shadowColor: Colors.transparent,
-                      elevation: 0,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                    ),
-                    child: const Text(
-                      'View Detail',
-                      style: TextStyle(
-                        fontSize: 14,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ),
       ),
     );
   }

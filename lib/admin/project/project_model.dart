@@ -384,6 +384,11 @@ class SalesStatusEvent {
   final String? signedAtLabel;
   final String? quotationNumber;
   final String status;
+  final List<dynamic> files;
+  final String approvalStatus; // PENDING / APPROVED / REJECTED / NONE
+  final bool isEscalate;
+  final String escalateToName;
+  final String approvalNote;
 
   const SalesStatusEvent({
     required this.id,
@@ -399,6 +404,11 @@ class SalesStatusEvent {
     required this.signedAtLabel,
     required this.quotationNumber,
     required this.status,
+    this.files = const [],
+    this.approvalStatus = '',
+    this.isEscalate = false,
+    this.escalateToName = '',
+    this.approvalNote = '',
   });
 
   bool get isQuotation => category == 'quotations';
@@ -438,10 +448,18 @@ class SalesStatusEvent {
         signedAtLabel: isSigned ? signedAt : null,
         quotationNumber: (json['quotationNumber'] ?? '-').toString(),
         status: status,
+        files: [
+          ...parseImages(json['uploadFile']),
+          if (json['isUploadQuotationSign'] == true)
+            ...parseImages(json['uploadQuotationSign']),
+        ],
       );
     }
 
-    final desc = (json['desc'] ?? json['activityDesc'] ?? '').toString();
+    final activityDesc = (json['activityDesc'] ?? '').toString().trim();
+    final desc = activityDesc.isNotEmpty
+        ? activityDesc
+        : (json['desc'] ?? '').toString();
     return SalesStatusEvent(
       id: (json['id'] ?? '').toString(),
       category: category.isEmpty ? 'activity' : category,
@@ -457,6 +475,11 @@ class SalesStatusEvent {
       signedAtLabel: null,
       quotationNumber: null,
       status: (json['salesStatus'] ?? json['approvalStatus'] ?? '-').toString(),
+      files: parseImages(json['salesStatusImages']),
+      approvalStatus: (json['approvalStatus'] ?? '').toString(),
+      isEscalate: json['isEscalate'] == true,
+      escalateToName: (json['escalateToName'] ?? '').toString(),
+      approvalNote: (json['approvalNote'] ?? '').toString(),
     );
   }
 }
@@ -466,8 +489,11 @@ class DeliveryStatusEvent {
   final String title;
   final String description;
   final String createdByName;
-  final String createdAtLabel;
-  final String status;
+  final String createdAtLabel; // "7 August 2026 · 16:04:16"
+  final String status; // approvalStatus: PENDING / APPROVED / REJECTED
+  final bool isEscalate;
+  final String escalateToName;
+  final List<dynamic> files; // [{url, name}]
 
   const DeliveryStatusEvent({
     required this.id,
@@ -476,17 +502,49 @@ class DeliveryStatusEvent {
     required this.createdByName,
     required this.createdAtLabel,
     required this.status,
+    this.isEscalate = false,
+    this.escalateToName = '',
+    this.files = const [],
   });
 
+  bool get isPending => status.trim().toUpperCase() == 'PENDING';
+
   factory DeliveryStatusEvent.fromJson(Map<String, dynamic> json) {
+    final date = (json['date'] ?? '').toString().trim();
+    final time = (json['time'] ?? '').toString().trim();
+    final label = date.isEmpty
+        ? (json['createdAt'] ?? '-').toString()
+        : (time.isEmpty ? date : '$date · $time');
+
     return DeliveryStatusEvent(
       id: (json['id'] ?? '').toString(),
-      title: (json['title'] ?? json['deliveryTitle'] ?? '-').toString(),
-      description: (json['desc'] ?? json['description'] ?? '').toString(),
+      title: (json['title'] ?? '-').toString(),
+      description: (json['desc'] ?? '').toString(),
       createdByName: (json['createdByName'] ?? '-').toString(),
-      createdAtLabel: (json['activityDate'] ?? json['createdAt'] ?? '-')
-          .toString(),
-      status: (json['status'] ?? json['deliveryStatus'] ?? '-').toString(),
+      createdAtLabel: label,
+      status: (json['approvalStatus'] ?? '-').toString(),
+      isEscalate: json['isEscalate'] == true,
+      escalateToName: (json['escalateToName'] ?? '').toString(),
+      files: parseImages(json['images']),
     );
   }
+}
+
+/// `images` dari API: [{ "id", "image": "nama.pdf", "imagePath": "https://..." }]
+/// -> [{url, name}] untuk FileOpenHelper.openFile
+List<dynamic> parseImages(dynamic raw) {
+  if (raw is! List) return const [];
+  final result = <Map<String, String>>[];
+  for (final e in raw) {
+    if (e is! Map) continue;
+    final url = (e['imagePath'] ?? e['url'] ?? e['path'] ?? '')
+        .toString()
+        .trim();
+    if (url.isEmpty) continue;
+    final name = (e['image'] ?? e['name'] ?? e['fileName'] ?? '')
+        .toString()
+        .trim();
+    result.add({'url': url, if (name.isNotEmpty) 'name': name});
+  }
+  return result;
 }

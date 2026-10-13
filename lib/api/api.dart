@@ -5,7 +5,7 @@ class ApiConfig {
   static bool get isDev => !isProd;
 
   static String get baseUrl =>
-      isProd ? "https://api.corimgroup.com/" : "https://api.corimgroup.com/";
+      isProd ? "https://api.corimgroup.com/" : "https://corim-api.eon.id/";
 
   static const String contentTypeJson = "application/json";
 
@@ -26,6 +26,8 @@ class Endpoints {
       "projects/$id/sales-status-quotations";
   static String projectDeliveryStatus(String id) =>
       "projects/$id/delivery-status";
+
+  static const String dashboardActivities = "dashboard/activities";
 
   static const String notifications = "notifications";
   static String notificationDetail(String id) => "notifications/$id";

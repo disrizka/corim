@@ -336,12 +336,22 @@ class _NotificationInfiniteListViewState
         ..sort((a, b) => widget.sortRank!(a).compareTo(widget.sortRank!(b)));
     }
 
-    if (items.isEmpty) {
-      return widget.emptyFilterBuilder(context, query.isNotEmpty);
-    }
-
     final totalPages = state.meta.totalPages < 1 ? 1 : state.meta.totalPages;
     final lastLoadedPage = loadedPages.isEmpty ? 0 : loadedPages.last;
+
+    if (items.isEmpty) {
+      // Hasil filter kosong tapi masih ada halaman lain -> muat otomatis
+      if (lastLoadedPage < totalPages &&
+          !state.didPageFail(lastLoadedPage + 1)) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted) _maybeLoadNextPage();
+        });
+        return const Center(
+          child: CircularProgressIndicator(color: NotifColors.gradientEnd),
+        );
+      }
+      return widget.emptyFilterBuilder(context, query.isNotEmpty);
+    }
     final nextPage = lastLoadedPage + 1;
     final hasMore = lastLoadedPage < totalPages;
     final nextPageFailed = state.didPageFail(nextPage);

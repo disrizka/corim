@@ -1,12 +1,19 @@
 import 'package:corim/admin/project/project_model.dart';
 import 'package:corim/admin/project/project_provider.dart';
+import 'package:corim/shared/file_open_helper.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 class ProjectDetailScreen extends ConsumerStatefulWidget {
   final String projectId;
 
-  const ProjectDetailScreen({super.key, required this.projectId});
+  final int initialTab;
+
+  const ProjectDetailScreen({
+    super.key,
+    required this.projectId,
+    this.initialTab = 0,
+  });
 
   @override
   ConsumerState<ProjectDetailScreen> createState() =>
@@ -20,7 +27,14 @@ class _ProjectDetailScreenState extends ConsumerState<ProjectDetailScreen>
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 3, vsync: this);
+    final initial = (widget.initialTab < 0 || widget.initialTab > 2)
+        ? 0
+        : widget.initialTab;
+    _tabController = TabController(
+      length: 3,
+      vsync: this,
+      initialIndex: initial,
+    );
   }
 
   @override
@@ -425,6 +439,84 @@ class _ProjectDetailScreenState extends ConsumerState<ProjectDetailScreen>
     );
   }
 
+  /// Badge status approval di samping judul (Pending Approval, dst).
+  Widget? _approvalBadge(String status) {
+    final String label;
+    final Color bg;
+    final Color fg;
+    switch (status.trim().toUpperCase()) {
+      case 'PENDING':
+        label = 'Pending Approval';
+        bg = const Color(0xFFFEF3C7);
+        fg = const Color(0xFF92400E);
+        break;
+      case 'APPROVED':
+        label = 'Approved';
+        bg = const Color(0xFFDCFCE7);
+        fg = const Color(0xFF15803D);
+        break;
+      case 'REJECTED':
+        label = 'Rejected';
+        bg = const Color(0xFFFEE2E2);
+        fg = const Color(0xFFB91C1C);
+        break;
+      default:
+        return null;
+    }
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+      decoration: BoxDecoration(
+        color: bg,
+        borderRadius: BorderRadius.circular(6),
+      ),
+      child: Text(
+        label,
+        style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: fg),
+      ),
+    );
+  }
+
+  /// Kotak dokumen (seperti "Document" di web). Tap = lihat/buka file.
+  Widget _buildFileTile(dynamic file) {
+    final info = FileOpenHelper.fileInfo(file);
+    final isImage = FileOpenHelper.isImageUrl(info.url);
+    final isPdf = FileOpenHelper.isPdfUrl(info.url);
+    final icon = isImage
+        ? Icons.image_outlined
+        : isPdf
+        ? Icons.picture_as_pdf_outlined
+        : Icons.insert_drive_file_outlined;
+    final label = info.label.trim().isEmpty ? 'Document' : info.label;
+
+    return InkWell(
+      borderRadius: BorderRadius.circular(10),
+      onTap: () => FileOpenHelper.openFile(context, file),
+      child: Container(
+        width: 92,
+        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 10),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(color: const Color(0xFFE5E7EB)),
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon, size: 28, color: const Color(0xFF6B7280)),
+            const SizedBox(height: 6),
+            Text(
+              label,
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+              textAlign: TextAlign.center,
+              style: const TextStyle(fontSize: 10.5, color: Color(0xFF6B7280)),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   Widget _buildTimelineTile({
     required Color dotColor,
     required String dateLabel,
@@ -432,6 +524,10 @@ class _ProjectDetailScreenState extends ConsumerState<ProjectDetailScreen>
     required String createdByName,
     String? description,
     List<Widget> extraLines = const [],
+    List<dynamic> files = const [],
+    Widget? titleBadge,
+    String? escalatedTo,
+    String? approvalNote,
     required bool isLast,
   }) {
     return IntrinsicHeight(
@@ -471,13 +567,21 @@ class _ProjectDetailScreenState extends ConsumerState<ProjectDetailScreen>
                     ),
                   ),
                   const SizedBox(height: 4),
-                  Text(
-                    title,
-                    style: const TextStyle(
-                      fontSize: 14,
-                      fontWeight: FontWeight.w700,
-                      color: Color(0xFF1A1A2E),
-                    ),
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 4,
+                    crossAxisAlignment: WrapCrossAlignment.center,
+                    children: [
+                      Text(
+                        title,
+                        style: const TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w700,
+                          color: Color(0xFF1A1A2E),
+                        ),
+                      ),
+                      if (titleBadge != null) titleBadge,
+                    ],
                   ),
                   const SizedBox(height: 3),
                   RichText(
@@ -508,9 +612,64 @@ class _ProjectDetailScreenState extends ConsumerState<ProjectDetailScreen>
                       ),
                     ),
                   ],
+                  if (escalatedTo != null && escalatedTo.trim().isNotEmpty) ...[
+                    const SizedBox(height: 4),
+                    RichText(
+                      text: TextSpan(
+                        style: const TextStyle(
+                          fontSize: 12.5,
+                          color: Color(0xFFB45309),
+                        ),
+                        children: [
+                          const TextSpan(text: 'Escalated to '),
+                          TextSpan(
+                            text: escalatedTo,
+                            style: const TextStyle(fontWeight: FontWeight.w700),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                  if (approvalNote != null &&
+                      approvalNote.trim().isNotEmpty) ...[
+                    const SizedBox(height: 8),
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 10,
+                        vertical: 6,
+                      ),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFF3F4F6),
+                        borderRadius: BorderRadius.circular(6),
+                      ),
+                      child: RichText(
+                        text: TextSpan(
+                          style: const TextStyle(
+                            fontSize: 12.5,
+                            color: Color(0xFF374151),
+                          ),
+                          children: [
+                            const TextSpan(
+                              text: 'Approval Note: ',
+                              style: TextStyle(fontWeight: FontWeight.w700),
+                            ),
+                            TextSpan(text: approvalNote),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ],
                   if (extraLines.isNotEmpty) ...[
                     const SizedBox(height: 6),
                     ...extraLines,
+                  ],
+                  if (files.isNotEmpty) ...[
+                    const SizedBox(height: 10),
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
+                      children: [for (final f in files) _buildFileTile(f)],
+                    ),
                   ],
                 ],
               ),
@@ -574,9 +733,24 @@ class _ProjectDetailScreenState extends ConsumerState<ProjectDetailScreen>
   }
 
   Widget _buildSalesStatusTile(SalesStatusEvent e, {required bool isLast}) {
-    final dotColor = e.isQuotation
-        ? (e.isSigned ? const Color(0xFF16A34A) : const Color(0xFF9CA3AF))
-        : const Color(0xFF2563EB);
+    final Color dotColor;
+    if (e.isQuotation) {
+      dotColor = e.isSigned ? const Color(0xFF16A34A) : const Color(0xFF9CA3AF);
+    } else {
+      switch (e.approvalStatus.trim().toUpperCase()) {
+        case 'PENDING':
+          dotColor = const Color(0xFFF59E0B);
+          break;
+        case 'APPROVED':
+          dotColor = const Color(0xFF16A34A);
+          break;
+        case 'REJECTED':
+          dotColor = const Color(0xFFDC2626);
+          break;
+        default:
+          dotColor = const Color(0xFF2563EB);
+      }
+    }
 
     final extraLines = <Widget>[];
     if (e.isQuotation) {
@@ -630,6 +804,10 @@ class _ProjectDetailScreenState extends ConsumerState<ProjectDetailScreen>
       createdByName: e.createdByName,
       description: e.description,
       extraLines: extraLines,
+      files: e.files,
+      titleBadge: e.isQuotation ? null : _approvalBadge(e.approvalStatus),
+      escalatedTo: e.isEscalate ? e.escalateToName : null,
+      approvalNote: e.approvalNote,
       isLast: isLast,
     );
   }
@@ -656,11 +834,18 @@ class _ProjectDetailScreenState extends ConsumerState<ProjectDetailScreen>
               else
                 for (var i = 0; i < events.length; i++)
                   _buildTimelineTile(
-                    dotColor: const Color(0xFF2563EB),
+                    dotColor: events[i].isPending
+                        ? const Color(0xFFF59E0B)
+                        : const Color(0xFF2563EB),
                     dateLabel: events[i].createdAtLabel,
                     title: events[i].title,
                     createdByName: events[i].createdByName,
                     description: events[i].description,
+                    files: events[i].files,
+                    titleBadge: _approvalBadge(events[i].status),
+                    escalatedTo: events[i].isEscalate
+                        ? events[i].escalateToName
+                        : null,
                     isLast: i == events.length - 1,
                   ),
             ],
@@ -676,34 +861,7 @@ class _ProjectDetailScreenState extends ConsumerState<ProjectDetailScreen>
     );
   }
 
-  // Widget _buildSortChip() {
-  //   return Container(
-  //     padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-  //     decoration: BoxDecoration(
-  //       border: Border.all(color: const Color(0xFFE0E0E0)),
-  //       borderRadius: BorderRadius.circular(8),
-  //     ),
-  //     child: const Row(
-  //       mainAxisSize: MainAxisSize.min,
-  //       children: [
-  //         Text(
-  //           'Oldest',
-  //           style: TextStyle(
-  //             fontSize: 12,
-  //             fontWeight: FontWeight.w600,
-  //             color: Color(0xFF444444),
-  //           ),
-  //         ),
-  //         SizedBox(width: 4),
-  //         Icon(
-  //           Icons.keyboard_arrow_down_rounded,
-  //           size: 16,
-  //           color: Color(0xFF444444),
-  //         ),
-  //       ],
-  //     ),
-  //   );
-  // }
+
 
   Widget _buildEmptyDelivery() {
     return Padding(

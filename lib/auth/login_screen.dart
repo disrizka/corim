@@ -111,61 +111,54 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     }
   }
 
+  InputDecoration _inputDecoration(String label, {Widget? suffixIcon}) {
+    OutlineInputBorder border(Color color) => OutlineInputBorder(
+      borderRadius: BorderRadius.circular(10),
+      borderSide: BorderSide(color: color),
+    );
+
+    return InputDecoration(
+      labelText: label,
+      labelStyle: const TextStyle(
+        color: Colors.white70,
+        fontSize: 12,
+        fontWeight: FontWeight.w500,
+      ),
+      filled: true,
+      fillColor: Colors.white.withOpacity(0.18),
+      contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 13),
+      suffixIcon: suffixIcon,
+      border: border(Colors.white.withOpacity(0.3)),
+      enabledBorder: border(Colors.white.withOpacity(0.3)),
+      focusedBorder: border(Colors.white.withOpacity(0.6)),
+      errorBorder: border(Colors.redAccent),
+      focusedErrorBorder: border(Colors.redAccent),
+      errorStyle: const TextStyle(color: Colors.redAccent),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      resizeToAvoidBottomInset: false,
+      resizeToAvoidBottomInset: true,
       body: Stack(
         children: [
-          Container(
-            decoration: const BoxDecoration(
-              gradient: LinearGradient(
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-                colors: [
-                  Color(0xFF1A3EC8),
-                  Color(0xFF0A2FA8),
-                  Color(0xFF0824A0),
-                ],
+          // Background gambar
+          Positioned.fill(
+            child: Container(
+              decoration: const BoxDecoration(
+                image: DecorationImage(
+                  image: AssetImage('assets/login/login.jpg'),
+                  fit: BoxFit.cover,
+                ),
               ),
             ),
           ),
 
-          Positioned(
-            top: -80,
-            right: -80,
-            child: Container(
-              width: 300,
-              height: 300,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                color: Colors.white.withOpacity(0.07),
-              ),
-            ),
-          ),
-          Positioned(
-            top: 100,
-            left: -80,
-            child: Container(
-              width: 220,
-              height: 220,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                color: Colors.white.withOpacity(0.05),
-              ),
-            ),
-          ),
-          Positioned(
-            bottom: 160,
-            right: -50,
-            child: Container(
-              width: 180,
-              height: 180,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                color: Colors.white.withOpacity(0.04),
-              ),
-            ),
+          // Overlay gelap tipis supaya teks putih tetap terbaca
+          // (hapus bagian ini kalau gambar sudah cukup gelap)
+          Positioned.fill(
+            child: Container(color: Colors.black.withOpacity(0.35)),
           ),
 
           SafeArea(
@@ -196,29 +189,19 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                                 children: [
                                   Image.asset(
                                     'assets/images/logo.png',
-                                    height: 52,
+                                    height: 90,
                                   ),
-                                  const SizedBox(height: 14),
+                                  const SizedBox(height: 16),
                                   const Text(
-                                    'Login',
+                                    'CORIM APEX',
                                     style: TextStyle(
                                       color: Colors.white,
                                       fontSize: 26,
                                       fontWeight: FontWeight.w700,
-                                      letterSpacing: 0.3,
+                                      letterSpacing: 2,
                                     ),
                                   ),
-                                  const SizedBox(height: 6),
-                                  const Text(
-                                    'Please to input your account data. For access this app.',
-                                    textAlign: TextAlign.center,
-                                    style: TextStyle(
-                                      color: Colors.white70,
-                                      fontSize: 13,
-                                      height: 1.5,
-                                    ),
-                                  ),
-                                  const SizedBox(height: 24),
+                                  const SizedBox(height: 28),
                                   TextFormField(
                                     controller: _emailController,
                                     keyboardType: TextInputType.emailAddress,
@@ -226,54 +209,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                                       color: Colors.white,
                                       fontSize: 14,
                                     ),
-                                    decoration: InputDecoration(
-                                      labelText: 'Email *',
-                                      labelStyle: const TextStyle(
-                                        color: Colors.white70,
-                                        fontSize: 12,
-                                        fontWeight: FontWeight.w500,
-                                      ),
-                                      filled: true,
-                                      fillColor: Colors.white.withOpacity(0.18),
-                                      contentPadding:
-                                          const EdgeInsets.symmetric(
-                                            horizontal: 14,
-                                            vertical: 13,
-                                          ),
-                                      border: OutlineInputBorder(
-                                        borderRadius: BorderRadius.circular(10),
-                                        borderSide: BorderSide(
-                                          color: Colors.white.withOpacity(0.3),
-                                        ),
-                                      ),
-                                      enabledBorder: OutlineInputBorder(
-                                        borderRadius: BorderRadius.circular(10),
-                                        borderSide: BorderSide(
-                                          color: Colors.white.withOpacity(0.3),
-                                        ),
-                                      ),
-                                      focusedBorder: OutlineInputBorder(
-                                        borderRadius: BorderRadius.circular(10),
-                                        borderSide: BorderSide(
-                                          color: Colors.white.withOpacity(0.6),
-                                        ),
-                                      ),
-                                      errorBorder: OutlineInputBorder(
-                                        borderRadius: BorderRadius.circular(10),
-                                        borderSide: const BorderSide(
-                                          color: Colors.redAccent,
-                                        ),
-                                      ),
-                                      focusedErrorBorder: OutlineInputBorder(
-                                        borderRadius: BorderRadius.circular(10),
-                                        borderSide: const BorderSide(
-                                          color: Colors.redAccent,
-                                        ),
-                                      ),
-                                      errorStyle: const TextStyle(
-                                        color: Colors.redAccent,
-                                      ),
-                                    ),
+                                    decoration: _inputDecoration('Email *'),
                                     validator: (v) => v == null || v.isEmpty
                                         ? 'Wajib diisi'
                                         : null,
@@ -286,20 +222,8 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                                       color: Colors.white,
                                       fontSize: 14,
                                     ),
-                                    decoration: InputDecoration(
-                                      labelText: 'Password *',
-                                      labelStyle: const TextStyle(
-                                        color: Colors.white70,
-                                        fontSize: 12,
-                                        fontWeight: FontWeight.w500,
-                                      ),
-                                      filled: true,
-                                      fillColor: Colors.white.withOpacity(0.18),
-                                      contentPadding:
-                                          const EdgeInsets.symmetric(
-                                            horizontal: 14,
-                                            vertical: 13,
-                                          ),
+                                    decoration: _inputDecoration(
+                                      'Password *',
                                       suffixIcon: IconButton(
                                         icon: Icon(
                                           _obscurePassword
@@ -312,39 +236,6 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                                           () => _obscurePassword =
                                               !_obscurePassword,
                                         ),
-                                      ),
-                                      border: OutlineInputBorder(
-                                        borderRadius: BorderRadius.circular(10),
-                                        borderSide: BorderSide(
-                                          color: Colors.white.withOpacity(0.3),
-                                        ),
-                                      ),
-                                      enabledBorder: OutlineInputBorder(
-                                        borderRadius: BorderRadius.circular(10),
-                                        borderSide: BorderSide(
-                                          color: Colors.white.withOpacity(0.3),
-                                        ),
-                                      ),
-                                      focusedBorder: OutlineInputBorder(
-                                        borderRadius: BorderRadius.circular(10),
-                                        borderSide: BorderSide(
-                                          color: Colors.white.withOpacity(0.6),
-                                        ),
-                                      ),
-                                      errorBorder: OutlineInputBorder(
-                                        borderRadius: BorderRadius.circular(10),
-                                        borderSide: const BorderSide(
-                                          color: Colors.redAccent,
-                                        ),
-                                      ),
-                                      focusedErrorBorder: OutlineInputBorder(
-                                        borderRadius: BorderRadius.circular(10),
-                                        borderSide: const BorderSide(
-                                          color: Colors.redAccent,
-                                        ),
-                                      ),
-                                      errorStyle: const TextStyle(
-                                        color: Colors.redAccent,
                                       ),
                                     ),
                                     validator: (v) => v == null || v.isEmpty
@@ -378,7 +269,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                                     height: 50,
                                     child: DecoratedBox(
                                       decoration: BoxDecoration(
-                                        gradient: LinearGradient(
+                                        gradient: const LinearGradient(
                                           begin: Alignment.centerLeft,
                                           end: Alignment.centerRight,
                                           colors: [
@@ -447,9 +338,9 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                         'CORIM APEX',
                         style: TextStyle(
                           color: Colors.white,
-                          fontSize: 18,
-                          fontWeight: FontWeight.w800,
-                          letterSpacing: 3,
+                          fontSize: 12,
+                          fontWeight: FontWeight.w700,
+                          letterSpacing: 2,
                         ),
                       ),
                       const SizedBox(height: 4),

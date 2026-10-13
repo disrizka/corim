@@ -1,5 +1,6 @@
 import 'package:corim/auth/auth_provider.dart';
 import 'package:corim/auth/login_screen.dart';
+import 'package:corim/main_button_nav.dart';
 import 'package:corim/notifications/notifcation_screen.dart';
 import 'package:corim/profile/change_password_screen.dart';
 import 'package:corim/profile/profile_model.dart';
@@ -16,89 +17,101 @@ class ProfileScreen extends ConsumerWidget {
 
     return Scaffold(
       backgroundColor: Colors.white,
-      body: SafeArea(
-        bottom: false,
-        child: Column(
-          children: [
-            _buildHeader(context, profileAsync),
-            Expanded(
-              child: Container(
-                width: double.infinity,
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 20,
-                  vertical: 24,
+      body: Stack(
+        children: [
+          SafeArea(
+            bottom: false,
+            child: Column(
+              children: [
+                _buildHeader(context, profileAsync),
+                Expanded(
+                  child: Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 20,
+                      vertical: 24,
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text(
+                          'Profile Menu',
+                          style: TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.w700,
+                            color: Color(0xFF1A1D52),
+                          ),
+                        ),
+                        const SizedBox(height: 12),
+                        _menuItem(
+                          icon: Icons.lock_reset_outlined,
+                          label: 'Change Password',
+                          onTap: () {
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (_) => const ChangePasswordScreen(),
+                              ),
+                            );
+                          },
+                        ),
+                        _menuItem(
+                          icon: Icons.verified_user_outlined,
+                          label: 'Terms & Conditions',
+                          onTap: () =>
+                              _comingSoon(context, 'Terms & Conditions'),
+                        ),
+                        _menuItem(
+                          icon: Icons.system_update_outlined,
+                          label: 'Check for Updates',
+                          onTap: () =>
+                              _comingSoon(context, 'Check for Updates'),
+                        ),
+                        _menuItem(
+                          icon: Icons.logout,
+                          label: 'Log out',
+                          color: Colors.red,
+                          onTap: () => _handleLogout(context, ref),
+                        ),
+                        const Spacer(),
+                        Center(
+                          child: Column(
+                            children: [
+                              Text(
+                                'CORIM APEX',
+                                style: TextStyle(
+                                  color: Colors.grey.shade300,
+                                  fontWeight: FontWeight.w700,
+                                  fontSize: 20,
+                                  letterSpacing: 1,
+                                ),
+                              ),
+                              const SizedBox(height: 4),
+                              Text(
+                                '© 2023 Corim Apex. All rights reserved',
+                                style: TextStyle(
+                                  color: Colors.grey.shade400,
+                                  fontSize: 11,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(height: 92),
+                      ],
+                    ),
+                  ),
                 ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text(
-                      'Profile Menu',
-                      style: TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.w700,
-                        color: Color(0xFF1A1D52),
-                      ),
-                    ),
-                    const SizedBox(height: 12),
-                    _menuItem(
-                      icon: Icons.lock_reset_outlined,
-                      label: 'Change Password',
-                      onTap: () {
-                        Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (_) => const ChangePasswordScreen(),
-                          ),
-                        );
-                      },
-                    ),
-                    _menuItem(
-                      icon: Icons.verified_user_outlined,
-                      label: 'Terms & Conditions',
-                      onTap: () => _comingSoon(context, 'Terms & Conditions'),
-                    ),
-                    _menuItem(
-                      icon: Icons.system_update_outlined,
-                      label: 'Check for Updates',
-                      onTap: () => _comingSoon(context, 'Check for Updates'),
-                    ),
-                    _menuItem(
-                      icon: Icons.logout,
-                      label: 'Log out',
-                      color: Colors.red,
-                      onTap: () => _handleLogout(context, ref),
-                    ),
-                    const Spacer(),
-                    Center(
-                      child: Column(
-                        children: [
-                          Text(
-                            'CORIM APEX',
-                            style: TextStyle(
-                              color: Colors.grey.shade300,
-                              fontWeight: FontWeight.w700,
-                              fontSize: 20,
-                              letterSpacing: 1,
-                            ),
-                          ),
-                          const SizedBox(height: 4),
-                          Text(
-                            '© 2023 Corim Apex. All rights reserved',
-                            style: TextStyle(
-                              color: Colors.grey.shade400,
-                              fontSize: 11,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                  ],
-                ),
-              ),
+              ],
             ),
-          ],
-        ),
+          ),
+          const Positioned(
+            bottom: 16,
+            left: 16,
+            right: 16,
+            child: MainBottomNav(currentItem: MainNavItem.contact),
+          ),
+        ],
       ),
     );
   }
@@ -155,10 +168,7 @@ class ProfileScreen extends ConsumerWidget {
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    IconButton(
-                      onPressed: () => Navigator.maybePop(context),
-                      icon: const Icon(Icons.arrow_back, color: Colors.white),
-                    ),
+                    const SizedBox(width: 48),
                     const Text(
                       'My Profile',
                       style: TextStyle(
