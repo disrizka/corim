@@ -60,8 +60,6 @@ class _ProjectListScreenState extends ConsumerState<ProjectListScreen> {
   void _onScroll() {
     if (!_scrollController.hasClients) return;
     final position = _scrollController.position;
-    // Mulai load halaman berikutnya sebelum benar-benar mentok bawah,
-    // supaya user gak sempat lihat jeda kosong.
     if (position.pixels >= position.maxScrollExtent - 300) {
       ref.read(projectListPagingProvider.notifier).loadMore();
     }
@@ -97,7 +95,6 @@ class _ProjectListScreenState extends ConsumerState<ProjectListScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final summary = ref.watch(projectStatusSummaryProvider);
     final pagingState = ref.watch(projectListPagingProvider);
 
     return Scaffold(
@@ -110,7 +107,9 @@ class _ProjectListScreenState extends ConsumerState<ProjectListScreen> {
             child: CustomScrollView(
               controller: _scrollController,
               slivers: [
-                SliverToBoxAdapter(child: _buildHeader(context, summary)),
+                SliverToBoxAdapter(
+                  child: _buildHeader(context, pagingState.stats),
+                ),
                 SliverToBoxAdapter(
                   child: Padding(
                     padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
@@ -139,7 +138,7 @@ class _ProjectListScreenState extends ConsumerState<ProjectListScreen> {
     );
   }
 
-  Widget _buildHeader(BuildContext context, ProjectStatusSummary summary) {
+  Widget _buildHeader(BuildContext context, ProjectStats? stats) {
     return Container(
       decoration: const BoxDecoration(
         gradient: LinearGradient(
@@ -206,11 +205,11 @@ class _ProjectListScreenState extends ConsumerState<ProjectListScreen> {
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                   children: [
-                    _buildStatItem(summary.newProject, 'New Project'),
+                    _buildStatItem(stats?.newProject, 'New Project'),
                     _buildStatDivider(),
-                    _buildStatItem(summary.ontimeProject, 'Ontime Project'),
+                    _buildStatItem(stats?.wonProject, 'Project Won'),
                     _buildStatDivider(),
-                    _buildStatItem(summary.delayProject, 'Delay Project'),
+                    _buildStatItem(stats?.lossProject, 'Project Loss'),
                   ],
                 ),
               ),
@@ -225,11 +224,11 @@ class _ProjectListScreenState extends ConsumerState<ProjectListScreen> {
     return Container(width: 1, height: 36, color: Colors.white24);
   }
 
-  Widget _buildStatItem(int value, String label) {
+  Widget _buildStatItem(int? value, String label) {
     return Column(
       children: [
         Text(
-          '$value',
+          value?.toString() ?? '-',
           style: const TextStyle(
             color: Colors.white,
             fontSize: 26,

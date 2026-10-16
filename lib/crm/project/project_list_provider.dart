@@ -5,57 +5,43 @@ import 'package:corim/crm/client_detail/project_model.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_riverpod/legacy.dart';
 
-class ProjectStatusSummary {
+class ProjectStats {
   final int newProject;
-  final int ontimeProject;
+  final int onTimeProject;
   final int delayProject;
+  final int wonProject;
+  final int lossProject;
 
-  const ProjectStatusSummary({
-    required this.newProject,
-    required this.ontimeProject,
-    required this.delayProject,
+  const ProjectStats({
+    this.newProject = 0,
+    this.onTimeProject = 0,
+    this.delayProject = 0,
+    this.wonProject = 0,
+    this.lossProject = 0,
   });
-}
 
-const _monthMap = {
-  'jan': 1,
-  'feb': 2,
-  'mar': 3,
-  'apr': 4,
-  'may': 5,
-  'jun': 6,
-  'jul': 7,
-  'aug': 8,
-  'sep': 9,
-  'oct': 10,
-  'nov': 11,
-  'dec': 12,
-};
-
-DateTime? _parseApiDate(String raw) {
-  final value = raw.trim();
-  if (value.isEmpty || value == '-') return null;
-
-  final parts = value.split(RegExp(r'\s+'));
-  if (parts.length != 3) return null;
-
-  final day = int.tryParse(parts[0]);
-  final month =
-      _monthMap[parts[1].toLowerCase().substring(
-        0,
-        parts[1].length >= 3 ? 3 : parts[1].length,
-      )];
-  final year = int.tryParse(parts[2]);
-  if (day == null || month == null || year == null) return null;
-
-  return DateTime(year, month, day);
+  factory ProjectStats.fromJson(Map<String, dynamic> json) {
+    int n(dynamic v) => (v as num?)?.toInt() ?? 0;
+    return ProjectStats(
+      newProject: n(json['newProject']),
+      onTimeProject: n(json['onTimeProject'] ?? json['ontimeProject']),
+      delayProject: n(json['delayProject']),
+      wonProject: n(json['wonProject']),
+      lossProject: n(json['lossProject']),
+    );
+  }
 }
 
 class _ProjectPage {
   final List<ProjectListItem> items;
   final int totalPages;
+  final ProjectStats? stats;
 
-  const _ProjectPage({required this.items, required this.totalPages});
+  const _ProjectPage({
+    required this.items,
+    required this.totalPages,
+    this.stats,
+  });
 }
 
 Future<_ProjectPage> _fetchProjectPage(
@@ -78,7 +64,12 @@ Future<_ProjectPage> _fetchProjectPage(
   final items = data.map((e) => ProjectListItem.fromJson(e)).toList();
   final totalPages = (body['page']?['total_pages'] as num?)?.toInt() ?? 1;
 
-  return _ProjectPage(items: items, totalPages: totalPages);
+  final rawStats = body['stats'];
+  final stats = rawStats is Map<String, dynamic>
+      ? ProjectStats.fromJson(rawStats)
+      : null;
+
+  return _ProjectPage(items: items, totalPages: totalPages, stats: stats);
 }
 
 class ProjectListPagingState {
@@ -89,6 +80,9 @@ class ProjectListPagingState {
   final int page;
   final String? error;
 
+  /// Statistik global dari API (`stats`). null = belum ada / tidak dikirim.
+  final ProjectStats? stats;
+
   const ProjectListPagingState({
     this.items = const [],
     this.isInitialLoading = true,
@@ -96,6 +90,7 @@ class ProjectListPagingState {
     this.hasMore = true,
     this.page = 0,
     this.error,
+    this.stats,
   });
 
   ProjectListPagingState copyWith({
@@ -105,6 +100,7 @@ class ProjectListPagingState {
     bool? hasMore,
     int? page,
     String? error,
+    ProjectStats? stats,
   }) {
     return ProjectListPagingState(
       items: items ?? this.items,
@@ -113,6 +109,7 @@ class ProjectListPagingState {
       hasMore: hasMore ?? this.hasMore,
       page: page ?? this.page,
       error: error,
+      stats: stats ?? this.stats,
     );
   }
 }
@@ -134,6 +131,7 @@ class ProjectListPagingNotifier extends StateNotifier<ProjectListPagingState> {
         isInitialLoading: false,
         page: 1,
         hasMore: 1 < result.totalPages && result.items.length == 20,
+        stats: result.stats,
       );
     } catch (e) {
       state = ProjectListPagingState(isInitialLoading: false, error: '$e');
@@ -153,6 +151,7 @@ class ProjectListPagingNotifier extends StateNotifier<ProjectListPagingState> {
         isLoadingMore: false,
         page: nextPage,
         hasMore: nextPage < result.totalPages && result.items.length == 20,
+        stats: result.stats,
       );
     } catch (_) {
       state = state.copyWith(isLoadingMore: false);
@@ -168,37 +167,6 @@ final projectListPagingProvider =
       ProjectListPagingState
     >((ref) => ProjectListPagingNotifier(ref));
 
-// Summary langsung dihitung dari paging state tanpa memicu request ekstra ke seluruh database
-final projectStatusSummaryProvider = Provider.autoDispose<ProjectStatusSummary>(
-  (ref) {
-    final pagingState = ref.watch(projectListPagingProvider);
-    final projects = pagingState.items;
-
-    int newCount = 0;
-    int ontimeCount = 0;
-    int delayCount = 0;
-
-    final today = DateTime.now();
-    final todayDateOnly = DateTime(today.year, today.month, today.day);
-
-    for (final p in projects) {
-      final status = p.projectStatus.toLowerCase();
-      if (status == 'won') continue;
-
-      final endDate = _parseApiDate(p.expectedEndDate);
-      if (endDate == null) {
-        newCount++;
-      } else if (endDate.isBefore(todayDateOnly)) {
-        delayCount++;
-      } else {
-        ontimeCount++;
-      }
-    }
-
-    return ProjectStatusSummary(
-      newProject: newCount,
-      ontimeProject: ontimeCount,
-      delayProject: delayCount,
-    );
-  },
-);
+final projectStatsProvider = Provider.autoDispose<ProjectStats?>((ref) {
+  return ref.watch(projectListPagingProvider.select((s) => s.stats));
+});
