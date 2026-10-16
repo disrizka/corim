@@ -15,12 +15,6 @@ class RequestScreen extends ConsumerStatefulWidget {
 
 class _RequestScreenState extends ConsumerState<RequestScreen> {
   static const double _bottomNavReservedHeight = 16 + 60 + 16;
-  static const _gradient = LinearGradient(
-    begin: Alignment.centerLeft,
-    end: Alignment.centerRight,
-    colors: [Color(0xFF1B1C52), Color(0xFF075985)],
-  );
-
   final _searchController = TextEditingController();
 
   @override
@@ -78,23 +72,61 @@ class _RequestScreenState extends ConsumerState<RequestScreen> {
     );
   }
 
-  /// Langsung tab Sales Escalation & Expense Request (tanpa judul "Request").
+  /// Judul "Request List" + tab Sales Escalation / Expense Request.
+  /// Background putih, gaya mengikuti "Update Activity" di Home.
   Widget _buildTabHeader() {
     return Container(
-      decoration: const BoxDecoration(gradient: _gradient),
-      child: const SafeArea(
+      color: Colors.white,
+      child: SafeArea(
         bottom: false,
-        child: TabBar(
-          labelColor: Colors.white,
-          unselectedLabelColor: Colors.white60,
-          indicatorColor: Colors.white,
-          indicatorWeight: 3,
-          dividerColor: Colors.transparent,
-          labelStyle: TextStyle(fontSize: 14, fontWeight: FontWeight.w700),
-          tabs: [
-            Tab(text: 'Sales Escalation'),
-            Tab(text: 'Expense Request'),
-          ],
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text(
+                'Request List',
+                style: TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.w700,
+                  color: Color(0xFF1A1A2E),
+                ),
+              ),
+              const SizedBox(height: 12),
+              Container(
+                padding: const EdgeInsets.all(4),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(color: const Color(0xFFE5E7EB)),
+                ),
+                child: TabBar(
+                  dividerColor: Colors.transparent,
+                  indicatorSize: TabBarIndicatorSize.tab,
+                  indicator: BoxDecoration(
+                    color: const Color(0xFFEFF6FF),
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: const Color(0xFFBFDBFE)),
+                  ),
+                  labelColor: const Color(0xFF1D4ED8),
+                  unselectedLabelColor: const Color(0xFF6B7280),
+                  labelStyle: const TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                  ),
+                  unselectedLabelStyle: const TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w500,
+                  ),
+                  splashBorderRadius: BorderRadius.circular(8),
+                  tabs: const [
+                    Tab(height: 34, text: 'Sales Escalation'),
+                    Tab(height: 34, text: 'Expense Request'),
+                  ],
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );

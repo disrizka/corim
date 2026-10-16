@@ -239,6 +239,13 @@ class NotificationInfiniteListView extends ConsumerStatefulWidget {
   final Widget Function(BuildContext context, Object error) errorBuilder;
   final EdgeInsetsGeometry listPadding;
 
+  /// Jumlah kartu per baris. Default 1 (list biasa); isi 2 untuk tampilan
+  /// kiri-kanan. Kartu dalam satu baris otomatis sama tinggi.
+  final int columns;
+
+  /// Jarak antar kartu (horizontal & vertikal).
+  final double spacing;
+
   const NotificationInfiniteListView({
     super.key,
     required this.cardBuilder,
@@ -250,6 +257,8 @@ class NotificationInfiniteListView extends ConsumerStatefulWidget {
     this.searchMatcher,
     this.sortRank,
     this.listPadding = const EdgeInsets.fromLTRB(16, 16, 16, 24),
+    this.columns = 1,
+    this.spacing = 12,
   });
 
   @override
@@ -355,6 +364,8 @@ class _NotificationInfiniteListViewState
     final nextPage = lastLoadedPage + 1;
     final hasMore = lastLoadedPage < totalPages;
     final nextPageFailed = state.didPageFail(nextPage);
+    final cols = widget.columns < 1 ? 1 : widget.columns;
+    final rowCount = (items.length / cols).ceil();
 
     return RefreshIndicator(
       color: NotifColors.gradientEnd,
@@ -363,10 +374,10 @@ class _NotificationInfiniteListViewState
         controller: _scrollController,
         padding: widget.listPadding,
         physics: const AlwaysScrollableScrollPhysics(),
-        itemCount: items.length + (hasMore ? 1 : 0),
-        separatorBuilder: (_, __) => const SizedBox(height: 12),
+        itemCount: rowCount + (hasMore ? 1 : 0),
+        separatorBuilder: (_, __) => SizedBox(height: widget.spacing),
         itemBuilder: (context, i) {
-          if (i >= items.length) {
+          if (i >= rowCount) {
             if (nextPageFailed) {
               return Padding(
                 padding: const EdgeInsets.symmetric(vertical: 16),
@@ -401,7 +412,25 @@ class _NotificationInfiniteListViewState
             );
           }
 
-          return widget.cardBuilder(context, items[i]);
+          if (cols == 1) return widget.cardBuilder(context, items[i]);
+
+          // Satu baris berisi [cols] kartu, tingginya disamakan.
+          final start = i * cols;
+          return IntrinsicHeight(
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                for (var c = 0; c < cols; c++) ...[
+                  if (c > 0) SizedBox(width: widget.spacing),
+                  Expanded(
+                    child: start + c < items.length
+                        ? widget.cardBuilder(context, items[start + c])
+                        : const SizedBox.shrink(),
+                  ),
+                ],
+              ],
+            ),
+          );
         },
       ),
     );

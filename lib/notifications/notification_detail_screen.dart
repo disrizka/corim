@@ -7,6 +7,7 @@ import 'package:corim/notifications/notification_model.dart';
 import 'package:corim/notifications/notification_provider.dart';
 import 'package:corim/notifications/notification_style.dart';
 import 'package:corim/notifications/request_detail_widgets.dart';
+import 'package:corim/request/request_project_info.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_pdfview/flutter_pdfview.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -264,6 +265,9 @@ class _NotificationDetailScreenState
   }
 
   Widget _buildBody(BuildContext context, NotificationItem n) {
+    // Entity & Client Name diambil dari Project Detail
+    // (Involved Entity & Client Data > Name).
+    final info = resolveRequestProjectInfo(ref, n);
     return SingleChildScrollView(
       padding: const EdgeInsets.fromLTRB(20, 12, 20, 28),
       child: Column(
@@ -301,12 +305,12 @@ class _NotificationDetailScreenState
           RequestInfoRow(
             icon: Icons.apartment_outlined,
             label: 'Entity:',
-            value: n.entity,
+            value: info.entity,
           ),
           RequestInfoRow(
             icon: Icons.business_outlined,
             label: 'Client Name:',
-            value: n.clientName,
+            value: info.clientName,
           ),
           RequestInfoRow(
             icon: Icons.folder_outlined,
