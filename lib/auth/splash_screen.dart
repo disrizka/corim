@@ -42,15 +42,22 @@ class _SplashScreenState extends ConsumerState<SplashScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return const Scaffold(
-      backgroundColor: Color.fromARGB(255, 255, 255, 255),
-      body: Center(
-        child: SizedBox(
-          width: 200,
-          height: 200,
-          child: Image(
-            image: AssetImage('assets/images/logo.png'),
-            fit: BoxFit.contain,
+    return Scaffold(
+      backgroundColor: Colors.white,
+      body: SizedBox.expand(
+        child: Image.asset(
+          'assets/images/splash_screen.jpg',
+          fit: BoxFit.cover,
+          // Kalau file splash_screen.jpg belum ada, tampilkan logo lama
+          errorBuilder: (context, error, stackTrace) => const Center(
+            child: SizedBox(
+              width: 200,
+              height: 200,
+              child: Image(
+                image: AssetImage('assets/images/logo.png'),
+                fit: BoxFit.contain,
+              ),
+            ),
           ),
         ),
       ),

@@ -3,11 +3,14 @@ import 'dart:io';
 import 'dart:ui';
 import 'package:corim/admin/home/home_screen.dart';
 import 'package:corim/api/api.dart';
+import 'package:android_id/android_id.dart';
 import 'package:corim/auth/auth_provider.dart';
+import 'package:device_info_plus/device_info_plus.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:http/http.dart' as http;
+import 'package:package_info_plus/package_info_plus.dart';
 
 class LoginScreen extends ConsumerStatefulWidget {
   const LoginScreen({super.key});
@@ -22,6 +25,20 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
   final _passwordController = TextEditingController();
   bool _isLoading = false;
   bool _obscurePassword = true;
+  String _appVersion = '';
+
+  @override
+  void initState() {
+    super.initState();
+    _loadVersion();
+  }
+
+  /// Versi dibaca otomatis dari pubspec.yaml (version: 1.0.0+5)
+  Future<void> _loadVersion() async {
+    final info = await PackageInfo.fromPlatform();
+    if (!mounted) return;
+    setState(() => _appVersion = 'v${info.version} (${info.buildNumber})');
+  }
 
   @override
   void dispose() {
@@ -49,8 +66,33 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
             ? 'Android'
             : (Platform.isIOS ? 'iOS' : Platform.operatingSystem);
 
+        // Info device & aplikasi
+        String deviceId = '';
+        String osVersion = '';
+        String modelName = '';
+        String appVersion = '';
+        try {
+          final deviceInfo = DeviceInfoPlugin();
+          if (Platform.isAndroid) {
+            final android = await deviceInfo.androidInfo;
+            deviceId = await const AndroidId().getId() ?? android.id;
+            osVersion = android.version.release;
+            // Contoh: "samsung SM-G980F" / "google Pixel 8"
+            modelName = '${android.brand} ${android.model}';
+          } else if (Platform.isIOS) {
+            final ios = await deviceInfo.iosInfo;
+            deviceId = ios.identifierForVendor ?? '';
+            osVersion = ios.systemVersion;
+            modelName = ios.utsname.machine;
+          }
+          final pkg = await PackageInfo.fromPlatform();
+          appVersion = pkg.version; // otomatis dari pubspec.yaml
+        } catch (e) {
+          debugPrint('DEVICE INFO ERROR >> $e');
+        }
+
         debugPrint(
-          'LOGIN PAYLOAD >> email=${_emailController.text}, fcmToken=$fcmToken, deviceType=$deviceType, osName=$osName',
+          'LOGIN PAYLOAD >> email=${_emailController.text}, fcmToken=$fcmToken, deviceId=$deviceId, deviceType=$deviceType, osName=$osName, osVersion=$osVersion, modelName=$modelName, appVersion=$appVersion',
         );
 
         final response = await http.post(
@@ -60,8 +102,12 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
             'email': _emailController.text.trim(),
             'password': _passwordController.text,
             'fcmToken': fcmToken ?? '',
+            'deviceId': deviceId,
             'deviceType': deviceType,
             'osName': osName,
+            'osVersion': osVersion,
+            'modelName': modelName,
+            'appVersion': appVersion,
           }),
         );
 
@@ -351,6 +397,16 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                           fontSize: 11,
                         ),
                       ),
+                      if (_appVersion.isNotEmpty) ...[
+                        const SizedBox(height: 4),
+                        Text(
+                          _appVersion,
+                          style: TextStyle(
+                            color: Colors.white.withOpacity(0.45),
+                            fontSize: 10,
+                          ),
+                        ),
+                      ],
                     ],
                   ),
                 ),

@@ -29,8 +29,8 @@ class RequestCard extends ConsumerWidget {
     );
   }
 
-  /// Satu sel info: icon + label kecil di atas, value tebal di bawah.
-  Widget _field(IconData icon, String label, String value) {
+  /// Satu sel info: icon + value (tanpa label).
+  Widget _field(IconData icon, String value) {
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -38,27 +38,17 @@ class RequestCard extends ConsumerWidget {
           padding: const EdgeInsets.only(top: 1),
           child: Icon(icon, size: 14, color: const Color(0xFF6B7280)),
         ),
-        const SizedBox(width: 6),
+        const SizedBox(width: 8),
         Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                label,
-                style: const TextStyle(fontSize: 11, color: Color(0xFF6B7280)),
-              ),
-              const SizedBox(height: 1),
-              Text(
-                value,
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
-                style: const TextStyle(
-                  fontSize: 12.5,
-                  fontWeight: FontWeight.w600,
-                  color: Color(0xFF1A1A2E),
-                ),
-              ),
-            ],
+          child: Text(
+            value,
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+            style: const TextStyle(
+              fontSize: 12.5,
+              fontWeight: FontWeight.w600,
+              color: Color(0xFF1A1A2E),
+            ),
           ),
         ),
       ],
@@ -186,55 +176,15 @@ class RequestCard extends ConsumerWidget {
                 const Divider(height: 1, color: Color(0xFFF0F1F5)),
                 const SizedBox(height: 12),
 
-                // Kiri-kanan: Project | Client
-                _pair(
-                  _field(Icons.folder_outlined, 'Project', info.projectName),
-                  _field(Icons.business_outlined, 'Client', info.clientName),
-                ),
+                // Atas-bawah: Project, lalu Client
+                _field(Icons.folder_outlined, info.projectName),
                 const SizedBox(height: 10),
-                // Kiri-kanan: Entity | Requested by
+                _field(Icons.business_outlined, info.clientName),
+                const SizedBox(height: 10),
+                // Menyamping: Entity | Requested by
                 _pair(
-                  _field(Icons.apartment_outlined, 'Entity', info.entity),
-                  _field(
-                    Icons.person_outline_rounded,
-                    'Requested by',
-                    n.requestedBy,
-                  ),
-                ),
-
-                const SizedBox(height: 14),
-                SizedBox(
-                  width: double.infinity,
-                  height: 42,
-                  child: DecoratedBox(
-                    decoration: BoxDecoration(
-                      gradient: const LinearGradient(
-                        begin: Alignment.centerLeft,
-                        end: Alignment.centerRight,
-                        colors: [Color(0xFF1B1C52), Color(0xFF075985)],
-                      ),
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    child: ElevatedButton(
-                      onPressed: () => _openDetail(context),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.transparent,
-                        foregroundColor: Colors.white,
-                        shadowColor: Colors.transparent,
-                        elevation: 0,
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                      ),
-                      child: const Text(
-                        'View Detail',
-                        style: TextStyle(
-                          fontSize: 14,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                    ),
-                  ),
+                  _field(Icons.apartment_outlined, info.entity),
+                  _field(Icons.person_outline_rounded, n.requestedBy),
                 ),
               ],
             ),
