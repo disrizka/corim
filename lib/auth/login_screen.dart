@@ -33,11 +33,12 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     _loadVersion();
   }
 
-  /// Versi dibaca otomatis dari pubspec.yaml (version: 1.0.0+5)
+  /// Versi aplikasi yang terpasang (sama dengan "Versi Anda" di pop up update).
+  /// Dibaca otomatis dari pubspec.yaml (version: 1.0.0+6) -> tampil "v1.0.0".
   Future<void> _loadVersion() async {
     final info = await PackageInfo.fromPlatform();
     if (!mounted) return;
-    setState(() => _appVersion = 'v${info.version} (${info.buildNumber})');
+    setState(() => _appVersion = 'v${info.version}');
   }
 
   @override

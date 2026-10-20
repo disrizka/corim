@@ -1,6 +1,7 @@
 import 'package:corim/admin/home/home_screen.dart';
 import 'package:corim/auth/auth_provider.dart';
 import 'package:corim/auth/login_screen.dart';
+import 'package:corim/shared/app_update_checker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -20,6 +21,10 @@ class _SplashScreenState extends ConsumerState<SplashScreen> {
 
   void _handleSplashLogic() async {
     await Future.delayed(const Duration(seconds: 2));
+    if (!mounted) return;
+
+    // Cek versi aplikasi (pop up update). Kalau must_update, berhenti di sini.
+    await AppUpdateChecker.check(context);
     if (!mounted) return;
 
     await ref.read(authProvider.notifier).initializeAppFlow();
@@ -48,7 +53,6 @@ class _SplashScreenState extends ConsumerState<SplashScreen> {
         child: Image.asset(
           'assets/images/splash_screen.jpg',
           fit: BoxFit.cover,
-          // Kalau file splash_screen.jpg belum ada, tampilkan logo lama
           errorBuilder: (context, error, stackTrace) => const Center(
             child: SizedBox(
               width: 200,

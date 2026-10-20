@@ -5,6 +5,7 @@ import 'package:corim/notifications/notifcation_screen.dart';
 import 'package:corim/profile/change_password_screen.dart';
 import 'package:corim/profile/profile_model.dart';
 import 'package:corim/profile/profile_provider.dart';
+import 'package:corim/shared/app_update_checker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -65,7 +66,7 @@ class ProfileScreen extends ConsumerWidget {
                           icon: Icons.system_update_outlined,
                           label: 'Check for Updates',
                           onTap: () =>
-                              _comingSoon(context, 'Check for Updates'),
+                              AppUpdateChecker.check(context, manual: true),
                         ),
                         _menuItem(
                           icon: Icons.logout,
